@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+build/
+
+# Environment — JANGAN PERNAH COMMIT FILE INI
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Google credentials — JANGAN COMMIT
+config/google-service-account.json
+config/*.json
+*.pem
+*.key
+
+# Uploads (user files — store in cloud storage in production)
+public/uploads/
+
+# Misc
+.DS_Store
+*.log
+npm-debug.log*
+.vercel
+.turbo
