@@ -65,21 +65,19 @@ export function formatRelativeTime(dateStr: string | null | undefined): string {
 // ============================================================
 
 export const SO_STATUS: Record<string, { label: string; color: string }> = {
-  submitted:        { label: 'Submitted',        color: 'amber'  },
-  processing:       { label: 'Processing',        color: 'blue'   },
-  ready_to_invoice: { label: 'Ready to Invoice',  color: 'purple' },
-  shipped:          { label: 'Shipped',           color: 'cyan'   },
-  delivered:        { label: 'Delivered',         color: 'green'  },
-  completed:        { label: 'Completed',         color: 'green'  },
-  cancelled:        { label: 'Cancelled',         color: 'red'    },
+  submitted:  { label: 'Submitted',  color: 'amber'  },
+  processing: { label: 'Processing', color: 'blue'   },
+  invoicing:  { label: 'Invoicing',  color: 'purple' },
+  completed:  { label: 'Completed',  color: 'green'  },
+  cancelled:  { label: 'Cancelled',  color: 'red'    },
 };
 
 export const PO_STATUS: Record<string, { label: string; color: string }> = {
-  submitted:         { label: 'Menunggu SPV',     color: 'amber'  },
-  approved_spv:      { label: 'Disetujui SPV',    color: 'blue'   },
-  approved_finance:  { label: 'Disetujui Finance',color: 'purple' },
-  paid:              { label: 'Dibayar',           color: 'green'  },
-  rejected:          { label: 'Ditolak',           color: 'red'    },
+  submitted:    { label: 'Menunggu SPV',     color: 'amber'  },
+  approved_spv: { label: 'Disetujui SPV',    color: 'blue'   },
+  approved:     { label: 'Disetujui Finance', color: 'purple' },
+  paid:         { label: 'Dibayar',           color: 'green'  },
+  rejected:     { label: 'Ditolak',           color: 'red'    },
 };
 
 export const CA_STATUS: Record<string, { label: string; color: string }> = {
@@ -101,10 +99,9 @@ export const REIMBURSE_STATUS: Record<string, { label: string; color: string }> 
 };
 
 export const DO_STATUS: Record<string, { label: string; color: string }> = {
-  not_created: { label: 'Belum Dibuat', color: 'gray'   },
-  created:     { label: 'Dibuat',       color: 'blue'   },
-  shipped:     { label: 'Dikirim',      color: 'purple' },
-  delivered:   { label: 'Diterima',     color: 'green'  },
+  shipping:  { label: 'Dikirim',   color: 'blue'  },
+  delivered: { label: 'Diterima',  color: 'green' },
+  cancelled: { label: 'Dibatalkan', color: 'red'  },
 };
 
 export function getStatusBadge(status: string, map: Record<string, { label: string; color: string }>) {

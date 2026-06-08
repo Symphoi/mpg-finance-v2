@@ -29,6 +29,7 @@ export default function ReimburseApprovalPage() {
   const [rejectModal, setRejectModal] = useState<Reimburse | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [approveModal, setApproveModal] = useState<Reimburse | null>(null);
 
   const handleApprove = async (r: Reimburse) => {
     try {
@@ -37,7 +38,8 @@ export default function ReimburseApprovalPage() {
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
-      toast.success(`${r.reimbursement_code} disetujui`);
+      toast.success(`${r.reimbursement_code} disetujui${json.data?.journal_code ? ` — Journal: ${json.data.journal_code}` : ''}`);
+      setApproveModal(null);
       refetch();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Gagal');
@@ -122,7 +124,7 @@ export default function ReimburseApprovalPage() {
                         {r.status === 'submitted' && (
                           <>
                             <button className="btn btn-sm" style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' }}
-                              onClick={() => handleApprove(r)}>
+                              onClick={() => setApproveModal(r)}>
                               <CheckCircle2 size={12} />
                             </button>
                             <button className="btn btn-sm" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}
@@ -166,6 +168,41 @@ export default function ReimburseApprovalPage() {
             <div className="flex gap-2 mt-4 justify-end">
               <button className="btn btn-outline" onClick={() => setRejectModal(null)}>Batal</button>
               <button className="btn btn-danger" onClick={handleReject} disabled={submitting}>{submitting ? '...' : 'Tolak'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approve Confirmation Modal */}
+      {approveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[440px] p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: '#ecfdf5' }}>
+                <CheckCircle2 size={20} style={{ color: '#059669' }} />
+              </div>
+              <div>
+                <div className="font-bold text-[15px]">Konfirmasi Persetujuan</div>
+                <p className="text-[12.5px] mt-1" style={{ color: 'var(--color-text-secondary)' }}>
+                  Setujui reimbursement <strong>{approveModal.reimbursement_code}</strong>?
+                </p>
+                <p className="text-[12px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                  {approveModal.title} · {approveModal.submitted_by_user_name}
+                </p>
+                <p className="text-[13px] font-semibold mt-1" style={{ color: '#7c3aed' }}>
+                  {approveModal.total_amount.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })}
+                </p>
+                <p className="text-[11px] mt-1" style={{ color: '#059669' }}>
+                  Journal akuntansi akan dibuat otomatis
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button className="btn btn-outline" onClick={() => setApproveModal(null)}>Batal</button>
+              <button className="btn btn-sm" style={{ background: '#059669', color: '#fff', border: 'none' }}
+                onClick={() => handleApprove(approveModal)}>
+                <CheckCircle2 size={13} /> Ya, Setujui
+              </button>
             </div>
           </div>
         </div>

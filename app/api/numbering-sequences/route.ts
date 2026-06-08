@@ -10,20 +10,20 @@ export const GET = withAuth(async (req: NextRequest) => {
     const search = url.searchParams.get('search') ?? '';
     const conds  = ['1=1'];
     const params: unknown[] = [];
-    if (search) { conds.push('(document_type LIKE ? OR prefix LIKE ?)'); params.push(`%${search}%`,`%${search}%`); }
-    const rows = await query(`SELECT * FROM numbering_sequences WHERE ${conds.join(' AND ')} ORDER BY document_type ASC`, params);
+    if (search) { conds.push('(sequence_code LIKE ? OR prefix LIKE ? OR description LIKE ?)'); params.push(`%${search}%`,`%${search}%`,`%${search}%`); }
+    const rows = await query(`SELECT * FROM numbering_sequences WHERE ${conds.join(' AND ')} ORDER BY sequence_code ASC`, params);
     return ok(rows);
   } catch (err) { return serverError(err); }
 });
 
 export const PUT = withAuth(async (req: NextRequest) => {
   try {
-    const { document_type, current_value, prefix, is_active } = await req.json();
-    if (!document_type) return badRequest('document_type wajib');
+    const { sequence_code, next_number, prefix } = await req.json();
+    if (!sequence_code) return badRequest('sequence_code wajib');
     await query(
-      `UPDATE numbering_sequences SET current_value=?,prefix=?,is_active=?,updated_at=NOW() WHERE document_type=?`,
-      [current_value, prefix, is_active??1, document_type]
+      `UPDATE numbering_sequences SET next_number=?,prefix=?,updated_at=NOW() WHERE sequence_code=?`,
+      [next_number, prefix, sequence_code]
     );
-    return ok({ document_type });
+    return ok({ sequence_code });
   } catch (err) { return serverError(err); }
 });

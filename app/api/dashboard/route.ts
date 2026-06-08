@@ -1,279 +1,151 @@
 // app/api/dashboard/route.ts
-// FIXED: All data is real — no hardcoded 0s, no empty arrays
-// ADDED: Company filter via projects table JOIN
 import { NextRequest } from 'next/server';
 import { withAuth } from '@/app/lib/auth';
-import { query, queryOne } from '@/app/lib/db';
+import { query } from '@/app/lib/db';
 import { ok, serverError } from '@/app/lib/response';
 
 export const GET = withAuth(async (req: NextRequest) => {
   try {
-    const url = new URL(req.url);
-    const month = url.searchParams.get('month') ?? new Date().getMonth() + 1;
-    const year  = url.searchParams.get('year')  ?? new Date().getFullYear();
-    const company = url.searchParams.get('company'); // company_code filter
+    const { searchParams } = new URL(req.url);
+    const periodCode = searchParams.get('period')
+      || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const fromDate = searchParams.get('from_date');
+    const toDate = searchParams.get('to_date');
+    const companyCode = searchParams.get('company');
 
-    // Build company filter condition (JOIN via projects table)
-    let companyJoin = '';
-    let companyCondition = '';
-    const filterParams: unknown[] = [];
+    // ── Build date range ────────────────────────────────────────────────────
+    let startDate: string;
+    let endDate: string;
 
-    if (company) {
-      companyJoin = 'JOIN projects p ON p.project_code = so2.project_code';
-      companyCondition = 'AND p.company_code = ?';
-      filterParams.push(company);
+    if (fromDate && toDate) {
+      startDate = fromDate;
+      endDate = toDate;
+    } else {
+      const [year, month] = periodCode.split('-').map(Number);
+      startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      endDate = new Date(year, month, 0).toISOString().split('T')[0];
     }
 
-    const [
-      financialSummary,
-      operationalStats,
-      cashFlowChart,
-      expenseBreakdown,
-      caStats,
-      recentActivity,
-      topCustomers,
-      pendingAlerts,
-      deliveryStatus,
-    ] = await Promise.all([
+    // ── Build company filter ─────────────────────────────────────────────────
+    const baseParams: unknown[] = [startDate, endDate];
+    const companyParams: unknown[] = companyCode ? [companyCode] : [];
+    const companyWhere = companyCode ? 'AND je.company_code = ?' : '';
 
-      // ── Financial summary (this month) with company filter ──
-      query(`
-        SELECT
-          COALESCE((SELECT SUM(so2.total_amount) FROM sales_orders so2
-                    ${companyJoin}
-                    WHERE MONTH(so2.created_at)=? AND YEAR(so2.created_at)=? 
-                      AND so2.is_deleted=0 ${companyCondition}), 0) AS revenue,
-          COALESCE((SELECT SUM(po.total_amount) FROM purchase_orders po
-                    JOIN sales_orders so2 ON so2.so_code = po.so_code
-                    ${companyJoin}
-                    WHERE MONTH(po.created_at)=? AND YEAR(po.created_at)=? 
-                      AND po.is_deleted=0 ${companyCondition}), 0) AS po_expense,
-          COALESCE((SELECT SUM(r.total_amount) FROM reimbursements r
-                    JOIN projects p2 ON p2.project_code = r.project_code
-                    WHERE MONTH(r.created_at)=? AND YEAR(r.created_at)=? 
-                      AND r.status='approved' AND r.is_deleted=0
-                      ${company ? 'AND p2.company_code = ?' : ''}), 0) AS reimburse_expense,
-          COALESCE((SELECT SUM(so2.total_amount) FROM sales_orders so2
-                    ${companyJoin}
-                    WHERE so2.status NOT IN ('cancelled') AND so2.is_deleted=0
-                      ${companyCondition}), 0) AS total_ar
-      `, company ? [month, year, company, month, year, company, month, year, company, company] 
-                : [month, year, month, year, month, year]),
+    // ── 1. Trial balance ─────────────────────────────────────────────────────
+    const trialBalance: any[] = await query(
+      `
+      SELECT
+        coa.account_code,
+        coa.account_name,
+        coa.account_type,
+        coa.parent_account_code,
+        je.company_code,
+        COALESCE(SUM(ji.debit_amount),  0) AS total_debit,
+        COALESCE(SUM(ji.credit_amount), 0) AS total_credit,
+        CASE
+          WHEN coa.account_type IN ('asset', 'expense') THEN
+            COALESCE(SUM(ji.debit_amount), 0) - COALESCE(SUM(ji.credit_amount), 0)
+          WHEN coa.account_type IN ('liability', 'equity', 'revenue') THEN
+            COALESCE(SUM(ji.credit_amount), 0) - COALESCE(SUM(ji.debit_amount), 0)
+          ELSE
+            COALESCE(SUM(ji.debit_amount), 0) - COALESCE(SUM(ji.credit_amount), 0)
+        END AS balance
+      FROM journal_items ji
+      JOIN journal_entries       je  ON ji.journal_code  = je.journal_code
+      JOIN chart_of_accounts     coa ON ji.account_code  = coa.account_code
+      WHERE je.status = 'posted'
+        AND je.transaction_date BETWEEN ? AND ?
+        ${companyWhere}
+      GROUP BY
+        coa.account_code, coa.account_name, coa.account_type,
+        coa.parent_account_code, je.company_code
+      HAVING balance != 0
+      ORDER BY coa.account_code
+      `,
+      [...baseParams, ...companyParams],
+    );
 
-      // ── Operational counts with company filter ──
-      query(`
-        SELECT
-          (SELECT COUNT(*) FROM sales_orders so2
-           ${companyJoin}
-           WHERE so2.status NOT IN ('completed','cancelled','delivered') 
-             AND so2.is_deleted=0 ${companyCondition}) AS so_active,
-          (SELECT COUNT(*) FROM purchase_orders po
-           JOIN sales_orders so2 ON so2.so_code = po.so_code
-           ${companyJoin}
-           WHERE po.status='submitted' AND po.is_deleted=0 ${companyCondition}) AS po_pending_spv,
-          (SELECT COUNT(*) FROM purchase_orders po
-           JOIN sales_orders so2 ON so2.so_code = po.so_code
-           ${companyJoin}
-           WHERE po.status='approved_spv' AND po.is_deleted=0 ${companyCondition}) AS po_pending_finance,
-          (SELECT COUNT(*) FROM reimbursements r
-           JOIN projects p2 ON p2.project_code = r.project_code
-           WHERE r.status='submitted' AND r.is_deleted=0
-           ${company ? 'AND p2.company_code = ?' : ''}) AS reimburse_pending,
-          (SELECT COUNT(*) FROM delivery_orders do
-           JOIN sales_orders so2 ON so2.so_code = do.so_code
-           ${companyJoin}
-           WHERE do.status='shipped' AND do.is_deleted=0 ${companyCondition}) AS do_in_transit,
-          COALESCE((SELECT SUM(ca.remaining_amount) FROM cash_advances ca
-                    JOIN projects p2 ON p2.project_code = ca.project_code
-                    WHERE ca.status IN ('approved','active','partially_used') 
-                      AND ca.is_deleted=0
-                      ${company ? 'AND p2.company_code = ?' : ''}), 0) AS ca_outstanding
-      `, company ? [company, company, company, company, company, company] : []),
+    // ── 2. Intercompany elimination ──────────────────────────────────────────
+    // Interco transactions are identified by account codes 1150 (Piutang) & 2150 (Hutang)
+    const [elimRow]: any[] = await query(
+      `
+      SELECT
+        COALESCE(SUM(CASE
+          WHEN ji.account_code = '1150' THEN ji.debit_amount - ji.credit_amount
+          ELSE 0
+        END), 0) AS total_interco_debit,
+        COALESCE(SUM(CASE
+          WHEN ji.account_code = '2150' THEN ji.credit_amount - ji.debit_amount
+          ELSE 0
+        END), 0) AS total_interco_credit
+      FROM journal_items ji
+      JOIN journal_entries je ON ji.journal_code = je.journal_code
+      WHERE ji.account_code IN ('1150', '2150')
+        AND je.status != 'cancelled'
+        AND je.transaction_date BETWEEN ? AND ?
+        ${companyWhere}
+      `,
+      [...baseParams, ...companyParams],
+    );
 
-      // ── Cash flow chart: last 6 months with company filter ──
-      query(`
-        SELECT
-          DATE_FORMAT(m.month_date,'%b') AS month_label,
-          MONTH(m.month_date) AS month_num,
-          YEAR(m.month_date)  AS year_num,
-          COALESCE(so.total,0) AS revenue,
-          COALESCE(po.total,0) AS expense
-        FROM (
-          SELECT DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL n MONTH),'%Y-%m-01') AS month_date
-          FROM (SELECT 0 n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5) nums
-        ) m
-        LEFT JOIN (
-          SELECT DATE_FORMAT(so2.created_at,'%Y-%m-01') AS mo, SUM(so2.total_amount) AS total
-          FROM sales_orders so2
-          ${companyJoin}
-          WHERE so2.is_deleted=0 ${companyCondition}
-          GROUP BY mo
-        ) so ON so.mo = m.month_date
-        LEFT JOIN (
-          SELECT DATE_FORMAT(po.created_at,'%Y-%m-01') AS mo, SUM(po.total_amount) AS total
-          FROM purchase_orders po
-          JOIN sales_orders so2 ON so2.so_code = po.so_code
-          ${companyJoin}
-          WHERE po.is_deleted=0 ${companyCondition}
-          GROUP BY mo
-        ) po ON po.mo = m.month_date
-        ORDER BY m.month_date ASC
-      `, company ? [company, company] : []),
+    // ── 3. Split balance sheet / income statement ────────────────────────────
+    const balanceSheet    = trialBalance.filter(r => ['asset', 'liability', 'equity'].includes(r.account_type));
+    const incomeStatement = trialBalance.filter(r => ['revenue', 'expense'].includes(r.account_type));
 
-      // ── Expense breakdown by category with company filter ──
-      query(`
-        SELECT rc.name AS category, SUM(r.total_amount) AS total
-        FROM reimbursements r
-        LEFT JOIN reimbursement_categories rc ON rc.category_code = r.category_code
-        JOIN projects p2 ON p2.project_code = r.project_code
-        WHERE r.status='approved' AND r.is_deleted=0
-          AND YEAR(r.created_at)=?
-          ${company ? 'AND p2.company_code = ?' : ''}
-        GROUP BY r.category_code, rc.name
-        ORDER BY total DESC
-        LIMIT 5
-      `, company ? [year, company] : [year]),
+    // ── 4. Interco elimination amounts ───────────────────────────────────────
+    const elimDebit  = Number(elimRow?.total_interco_debit  ?? 0);
+    const elimCredit = Number(elimRow?.total_interco_credit ?? 0);
 
-      // ── CA stats with company filter ──
-      query(`
-        SELECT
-          COALESCE(SUM(CASE WHEN ca.status IN ('approved','active','partially_used') THEN ca.remaining_amount END), 0) AS outstanding,
-          COALESCE(SUM(CASE WHEN ca.status='submitted' THEN ca.total_amount END), 0) AS pending_approval,
-          COALESCE(SUM(CASE WHEN ca.status='in_settlement' THEN ca.remaining_amount END), 0) AS siap_dikembalikan
-        FROM cash_advances ca
-        JOIN projects p2 ON p2.project_code = ca.project_code
-        WHERE ca.is_deleted=0
-          ${company ? 'AND p2.company_code = ?' : ''}
-      `, company ? [company] : []),
+    // Interco elimination (remove 1150 & 2150) only applies to consolidated view.
+    // Single-company view shows their own interco accounts as-is.
+    const isConsolidated = !companyCode;
+    const INTERCO_ACCOUNTS = ['1150', '2150'];
+    const balanceSheetNet = isConsolidated
+      ? balanceSheet.filter(r => !INTERCO_ACCOUNTS.includes(r.account_code))
+      : balanceSheet;
 
-      // ── Recent activity with company filter ──
-      query(`
-        (SELECT 'SO' AS type, so2.so_code AS code, so2.customer_name AS party, 
-                so2.total_amount AS amount, so2.status, so2.created_at 
-         FROM sales_orders so2
-         ${companyJoin}
-         WHERE so2.is_deleted=0 ${companyCondition}
-         ORDER BY so2.created_at DESC LIMIT 5)
-        UNION ALL
-        (SELECT 'PO' AS type, po.po_code AS code, po.supplier_name AS party, 
-                po.total_amount AS amount, po.status, po.created_at 
-         FROM purchase_orders po
-         JOIN sales_orders so2 ON so2.so_code = po.so_code
-         ${companyJoin}
-         WHERE po.is_deleted=0 ${companyCondition}
-         ORDER BY po.created_at DESC LIMIT 5)
-        UNION ALL
-        (SELECT 'CA' AS type, ca.ca_code AS code, ca.employee_name AS party, 
-                ca.total_amount AS amount, ca.status, ca.created_at 
-         FROM cash_advances ca
-         JOIN projects p2 ON p2.project_code = ca.project_code
-         WHERE ca.is_deleted=0
-           ${company ? 'AND p2.company_code = ?' : ''}
-         ORDER BY ca.created_at DESC LIMIT 3)
-        UNION ALL
-        (SELECT 'RMB' AS type, r.reimbursement_code AS code, r.submitted_by_user_name AS party, 
-                r.total_amount AS amount, r.status, r.created_at 
-         FROM reimbursements r
-         JOIN projects p2 ON p2.project_code = r.project_code
-         WHERE r.is_deleted=0
-           ${company ? 'AND p2.company_code = ?' : ''}
-         ORDER BY r.created_at DESC LIMIT 3)
-        ORDER BY created_at DESC
-        LIMIT 15
-      `, company ? [company, company, company, company] : []),
+    // ── 5. Totals (after elimination) ────────────────────────────────────────
+    const sum = (rows: any[], type: string) =>
+      rows.filter(r => r.account_type === type).reduce((s, r) => s + Number(r.balance ?? 0), 0);
 
-      // ── Top 5 customers by total SO value with company filter ──
-      query(`
-        SELECT so2.customer_name, COUNT(*) AS order_count, SUM(so2.total_amount) AS total_value
-        FROM sales_orders so2
-        ${companyJoin}
-        WHERE so2.is_deleted=0 AND so2.status NOT IN ('cancelled')
-          ${companyCondition}
-        GROUP BY so2.customer_name
-        ORDER BY total_value DESC
-        LIMIT 5
-      `, company ? [company] : []),
+    const totalAssets      = sum(balanceSheetNet, 'asset');
+    const totalLiabilities = sum(balanceSheetNet, 'liability');
+    const totalEquity      = sum(balanceSheetNet, 'equity');
+    const totalRevenue     = sum(incomeStatement, 'revenue');
+    const totalExpense     = sum(incomeStatement, 'expense');
+    const netIncome        = totalRevenue - totalExpense;
 
-      // ── Pending alerts with company filter ──
-      query(`
-        (SELECT 'PO_SPV' AS alert_type, po.po_code AS ref_code, po.supplier_name AS party,
-                po.total_amount AS amount, DATEDIFF(NOW(), po.created_at) AS days_waiting, po.created_at AS ts
-         FROM purchase_orders po
-         JOIN sales_orders so2 ON so2.so_code = po.so_code
-         ${companyJoin}
-         WHERE po.status='submitted' AND po.is_deleted=0 ${companyCondition}
-         ORDER BY po.created_at ASC LIMIT 5)
-        UNION ALL
-        (SELECT 'CA_SETTLE' AS alert_type, ca.ca_code AS ref_code, ca.employee_name AS party,
-                ca.remaining_amount AS amount, DATEDIFF(NOW(), ca.approved_date) AS days_waiting, ca.updated_at AS ts
-         FROM cash_advances ca
-         JOIN projects p2 ON p2.project_code = ca.project_code
-         WHERE ca.status='active' AND ca.is_deleted=0
-           ${company ? 'AND p2.company_code = ?' : ''}
-         ORDER BY ca.updated_at ASC LIMIT 3)
-        UNION ALL
-        (SELECT 'RMB_PENDING' AS alert_type, r.reimbursement_code AS ref_code, r.submitted_by_user_name AS party,
-                r.total_amount AS amount, DATEDIFF(NOW(), r.created_at) AS days_waiting, r.created_at AS ts
-         FROM reimbursements r
-         JOIN projects p2 ON p2.project_code = r.project_code
-         WHERE r.status='submitted' AND r.is_deleted=0
-           ${company ? 'AND p2.company_code = ?' : ''}
-         ORDER BY r.created_at ASC LIMIT 3)
-        ORDER BY days_waiting DESC
-        LIMIT 10
-      `, company ? [company, company, company] : []),
-
-      // ── Active deliveries with company filter ──
-      query(`
-        SELECT do.do_code, do.so_code, do.courier, do.tracking_number, 
-               do.status, do.shipping_date, do.received_date
-        FROM delivery_orders do
-        JOIN sales_orders so2 ON so2.so_code = do.so_code
-        ${companyJoin}
-        WHERE do.status IN ('created','shipped') AND do.is_deleted=0
-          ${companyCondition}
-        ORDER BY do.shipping_date DESC
-        LIMIT 5
-      `, company ? [company] : []),
-    ]);
-
-    const fin     = (financialSummary as any[])[0];
-    const ops     = (operationalStats as any[])[0];
-    const ca      = (caStats as any[])[0];
-
-    const expense = Number(fin.po_expense) + Number(fin.reimburse_expense);
-    const profit  = Number(fin.revenue) - expense;
+    // ── 6. Companies list ────────────────────────────────────────────────────
+    const companies: any[] = await query(
+      `SELECT company_code, name FROM companies WHERE is_active = 1 ORDER BY name`,
+    );
 
     return ok({
-      financial: {
-        revenue:         Number(fin.revenue),
-        expense,
-        grossProfit:     profit,
-        margin:          fin.revenue > 0 ? +((profit / fin.revenue) * 100).toFixed(1) : 0,
-        totalAR:         Number(fin.total_ar),
+      period: periodCode,
+      from_date: fromDate ?? null,
+      to_date: toDate ?? null,
+      company_code: companyCode ?? 'ALL',
+      companies: companies ?? [],
+      balance_sheet: {
+        data: balanceSheetNet,
+        total_assets:      totalAssets,
+        total_liabilities: totalLiabilities,
+        total_equity:      totalEquity,
+        net_income:        netIncome,
       },
-      operational: {
-        soActive:          Number(ops.so_active),
-        poPendingSPV:      Number(ops.po_pending_spv),
-        poPendingFinance:  Number(ops.po_pending_finance),
-        reimbursePending:  Number(ops.reimburse_pending),
-        doInTransit:       Number(ops.do_in_transit),
-        caOutstanding:     Number(ops.ca_outstanding),
+      income_statement: {
+        data: incomeStatement,
+        total_revenue: totalRevenue,
+        total_expense: totalExpense,
+        net_income:    netIncome,
       },
-      cashFlow:         cashFlowChart,
-      expenseBreakdown: expenseBreakdown,
-      ca: {
-        outstanding:       Number(ca.outstanding),
-        pendingApproval:   Number(ca.pending_approval),
-        siapDikembalikan:  Number(ca.siap_dikembalikan),
+      intercompany_elimination: {
+        total_debit:  elimDebit,
+        total_credit: elimCredit,
       },
-      recentActivity:   recentActivity,
-      topCustomers:     topCustomers,
-      pendingAlerts:    pendingAlerts,
-      deliveries:       deliveryStatus,
     });
-  } catch (err) {
-    console.error('Dashboard API Error:', err);
-    return serverError(err);
+  } catch (error: any) {
+    console.error('Dashboard API Error:', error);
+    return serverError(error);
   }
 });

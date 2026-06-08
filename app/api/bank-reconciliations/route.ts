@@ -21,7 +21,7 @@ export const GET = withAuth(async (req: NextRequest) => {
 
     const [rows, count] = await Promise.all([
       query(`SELECT br.*, ba.bank_name, ba.account_number FROM bank_reconciliations br
-             LEFT JOIN bank_accounts ba ON ba.account_code=br.account_code
+             LEFT JOIN bank_accounts ba ON ba.account_code=br.bank_account_code
              ORDER BY br.created_at DESC LIMIT ? OFFSET ?`, [limit, offset]),
       query(`SELECT COUNT(*) AS total FROM bank_reconciliations`),
     ]);
@@ -34,10 +34,16 @@ export const POST = withAuth(async (req: NextRequest, user) => {
     const { account_code, period_start, period_end, bank_balance, book_balance, notes } = await req.json();
     if (!account_code || !period_start || !period_end) return badRequest('account_code, period_start, period_end wajib');
 
+    const reconcCode = `REC-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
     const difference = Number(bank_balance ?? 0) - Number(book_balance ?? 0);
     await query(
-      `INSERT INTO bank_reconciliations (account_code,period_start,period_end,bank_balance,book_balance,difference,status,notes,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,'draft',?,?,NOW(),NOW())`,
-      [account_code, period_start, period_end, bank_balance??0, book_balance??0, difference, notes??null, user.user_code]
+      `INSERT INTO bank_reconciliations
+        (reconciliation_code, bank_account_code, period_start, period_end, statement_date,
+         bank_balance, book_balance, difference, ending_balance, status, notes, created_by, created_at, updated_at)
+       VALUES (?,?,?,?,?, ?,?,?,?, 'draft', ?,?,NOW(),NOW())`,
+      [reconcCode, account_code, period_start, period_end, period_end,
+       bank_balance??0, book_balance??0, difference, bank_balance??0,
+       notes??null, user.user_code]
     );
     return created({ difference });
   } catch (err) { return serverError(err); }

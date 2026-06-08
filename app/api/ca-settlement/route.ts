@@ -1,10 +1,65 @@
-// app/api/ca-settlement/route.ts
-// FIXED: In v1 this was ca-refund/page.tsx calling ca-settlement API — naming was inconsistent
-// Now: page is /ca-settlement, API is /api/ca-settlement, component is CASettlementPage ✓
 import { NextRequest } from 'next/server';
 import { withAuth } from '@/app/lib/auth';
-import { query } from '@/app/lib/db';
+import { query, queryOne } from '@/app/lib/db';
 import { ok, created, paginated, badRequest, serverError } from '@/app/lib/response';
+
+async function createSettlementJournal(
+  caCode: string,
+  totalExpense: number,
+  settCode: string,
+  date: string,
+  userName: string
+) {
+  try {
+    // cash_advance rule: debit=1130 (Piutang CA Karyawan), credit=1110 (Kas)
+    // For settlement: Debit Expense, Credit Piutang CA (reversal of the advance)
+    const caRule: any = await queryOne(
+      `SELECT debit_account_code FROM accounting_rules WHERE transaction_type='cash_advance' AND is_active=1 LIMIT 1`
+    );
+    const expRule: any = await queryOne(
+      `SELECT debit_account_code FROM accounting_rules WHERE transaction_type='reimbursement' AND is_active=1 LIMIT 1`
+    );
+
+    const caAccount  = caRule?.debit_account_code  ?? '1130'; // Piutang Uang Muka Karyawan
+    const expAccount = expRule?.debit_account_code ?? '5100'; // Beban Operasional
+
+    const seq: any = await queryOne(
+      `SELECT next_number, prefix FROM numbering_sequences WHERE sequence_code='JNL' LIMIT 1`
+    );
+    const jnlNum = seq ? seq.next_number : 1;
+    const jnlCode = seq
+      ? `${seq.prefix}${String(jnlNum).padStart(5, '0')}`
+      : `JNL-${String(jnlNum).padStart(5, '0')}`;
+    const period = date.slice(0, 7);
+
+    await query(
+      `INSERT INTO journal_entries (journal_code,transaction_date,description,reference_type,reference_code,period_code,total_debit,total_credit,status,created_by)
+       VALUES (?,?,?,?,?,?,?,?,'posted',?)`,
+      [jnlCode, date, `CA Settlement: ${caCode} — ${settCode}`, 'cash_advance', settCode, period, totalExpense, totalExpense, userName]
+    );
+
+    const ts = Date.now();
+    await query(
+      `INSERT INTO journal_items (journal_item_code,journal_code,account_code,debit_amount,credit_amount,description) VALUES (?,?,?,?,0,?)`,
+      [`JNI-${ts}-1`, jnlCode, expAccount, totalExpense, `Beban dari CA ${caCode}`]
+    );
+    await query(
+      `INSERT INTO journal_items (journal_item_code,journal_code,account_code,debit_amount,credit_amount,description) VALUES (?,?,?,0,?,?)`,
+      [`JNI-${ts}-2`, jnlCode, caAccount, totalExpense, `Penyelesaian CA ${caCode}`]
+    );
+
+    if (seq) {
+      await query(`UPDATE numbering_sequences SET next_number=? WHERE sequence_code='JNL'`, [jnlNum + 1]);
+    } else {
+      await query(`INSERT INTO numbering_sequences (sequence_code,prefix,next_number) VALUES ('JNL','JNL-',2)`);
+    }
+
+    return jnlCode;
+  } catch (err) {
+    console.error('[CA Settlement Journal Error]', err);
+    return null;
+  }
+}
 
 export const GET = withAuth(async (req: NextRequest) => {
   try {
@@ -40,15 +95,20 @@ export const POST = withAuth(async (req: NextRequest, user) => {
     if (!ca_code) return badRequest('ca_code wajib');
     if (!expense_items?.length) return badRequest('expense_items wajib diisi');
 
-    // Get current CA
     const [caRow] = await query<any>(`SELECT * FROM cash_advances WHERE ca_code=? AND is_deleted=0`, [ca_code]);
     if (!caRow) return badRequest('CA tidak ditemukan');
-    if (!['active','approved','partially_used'].includes(caRow.status)) return badRequest('CA tidak dalam status yang bisa disettled');
+    if (!['active','approved','partially_used'].includes(caRow.status)) {
+      return badRequest('CA tidak dalam status yang bisa disettled');
+    }
 
-    const totalExpense  = (expense_items as any[]).reduce((s: number, i: any) => s + Number(i.amount), 0);
-    const usedAmount    = Number(caRow.used_amount) + totalExpense;
-    const remaining     = Number(caRow.total_amount) - usedAmount;
-    const settCode      = `SETT-${ca_code}-${Date.now()}`;
+    const totalExpense = (expense_items as any[]).reduce((s: number, i: any) => s + Number(i.amount), 0);
+    const usedAmount   = Number(caRow.used_amount) + totalExpense;
+    const remaining    = Number(caRow.total_amount) - usedAmount;
+    const settCode     = `SETT-${ca_code}-${Date.now()}`;
+    const today        = new Date().toISOString().split('T')[0];
+
+    // Mark CA as in_settlement while processing
+    await query(`UPDATE cash_advances SET status='in_settlement', updated_at=NOW() WHERE ca_code=?`, [ca_code]);
 
     await query(`
       INSERT INTO ca_settlements
@@ -60,7 +120,6 @@ export const POST = withAuth(async (req: NextRequest, user) => {
         remaining_action ?? 'return', notes ?? null, bank_account_code ?? null,
         attachment_url ?? null, user.name, user.user_code]);
 
-    // Insert expense items
     for (const item of expense_items as any[]) {
       await query(`
         INSERT INTO ca_transactions
@@ -69,19 +128,21 @@ export const POST = withAuth(async (req: NextRequest, user) => {
         VALUES (?,?,?,?,?,?,?,0,NOW(),NOW())
       `, [
         `CATX-${Math.random().toString(36).slice(2,8).toUpperCase()}`,
-        ca_code, item.date ?? new Date().toISOString().split('T')[0],
-        item.description, item.amount,
+        ca_code, item.date ?? today, item.description, item.amount,
         item.category ?? null, item.receipt_url ?? null,
       ]);
     }
 
-    // Update CA status & amounts
+    // Create journal entry for settlement
+    const journalCode = await createSettlementJournal(ca_code, totalExpense, settCode, today, user.name);
+
+    // Update CA to final status
     const newStatus = remaining <= 0 ? 'fully_used' : 'partially_used';
     await query(
       `UPDATE cash_advances SET used_amount=?, remaining_amount=?, status=?, updated_at=NOW() WHERE ca_code=?`,
       [usedAmount, Math.max(0, remaining), newStatus, ca_code]
     );
 
-    return created({ settlement_code: settCode, total_expense: totalExpense, remaining });
+    return created({ settlement_code: settCode, total_expense: totalExpense, remaining, journal_code: journalCode });
   } catch (err) { return serverError(err); }
 });

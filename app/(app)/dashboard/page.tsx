@@ -1,442 +1,525 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { formatRupiah, formatRupiahCompact, formatRelativeTime, SO_STATUS, PO_STATUS, CA_STATUS, REIMBURSE_STATUS } from '@/lib/utils';
-import { TrendingUp, TrendingDown, Minus, FileText, ShoppingCart, AlertCircle, Truck, Wallet, RefreshCw, Download, ArrowRight, Bell } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { formatRupiahCompact, formatDate } from '@/lib/utils';
+import {
+  TrendingUp, TrendingDown, Building2, Banknote, PieChart,
+  RefreshCw, Download, Loader2, ChevronDown, CheckCircle2, AlertCircle,
+} from 'lucide-react';
 
-interface DashboardData {
-  financial: { revenue: number; expense: number; grossProfit: number; margin: number; totalAR: number };
-  operational: { soActive: number; poPendingSPV: number; poPendingFinance: number; reimbursePending: number; doInTransit: number; caOutstanding: number };
-  cashFlow: { month_label: string; revenue: number; expense: number }[];
-  ca: { outstanding: number; pendingApproval: number; siapDikembalikan: number };
-  recentActivity: { type: string; code: string; party: string; amount: number; status: string; created_at: string }[];
-  topCustomers: { customer_name: string; order_count: number; total_value: number }[];
-  pendingAlerts: { alert_type: string; ref_code: string; party: string; amount: number; days_waiting: number }[];
-  deliveries: { do_code: string; so_code: string; courier: string; status: string; shipping_date: string }[];
-}
+// ─── Types ─────────────────────────────────────────────────────────────────
 
-interface Company {
+interface ConsolidatedData {
+  period: string;
+  from_date: string | null;
+  to_date: string | null;
   company_code: string;
-  name: string;
+  companies: { company_code: string; name: string }[];
+  balance_sheet: {
+    data: AccountRow[];
+    total_assets: number;
+    total_liabilities: number;
+    total_equity: number;
+    net_income: number;
+  };
+  income_statement: {
+    data: AccountRow[];
+    total_revenue: number;
+    total_expense: number;
+    net_income: number;
+  };
+  intercompany_elimination: {
+    total_debit: number;
+    total_credit: number;
+  };
 }
 
-const TYPE_COLOR: Record<string, string> = {
-  SO: '#7c3aed', PO: '#4f46e5', CA: '#059669', RMB: '#d97706',
+interface AccountRow {
+  account_code: string;
+  account_name: string;
+  account_type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
+  balance: number;
+  company_code?: string;
+}
+
+type ActiveTab = 'overview' | 'balance_sheet' | 'income_statement';
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+const fmt = (n: number) => formatRupiahCompact(Math.abs(n || 0));
+
+// ─── KPI Card ───────────────────────────────────────────────────────────────
+
+const VARIANT = {
+  purple: { accent: '#7C3AED', text: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' },
+  red:    { accent: '#DC2626', text: '#DC2626', bg: '#FEF2F2', border: '#FECACA' },
+  green:  { accent: '#059669', text: '#059669', bg: '#ECFDF5', border: '#A7F3D0' },
+  indigo: { accent: '#4F46E5', text: '#4F46E5', bg: '#EEF2FF', border: '#C7D2FE' },
 };
 
-const AVATAR_COLORS = [
-  ['#f5f3ff','#7c3aed'], ['#eef2ff','#4f46e5'], ['#ecfeff','#0891b2'],
-  ['#ecfdf5','#059669'], ['#fffbeb','#d97706'],
-];
-
-function StatCard({ label, value, sub, trend, trendDir, icon: Icon, accent }: {
-  label: string; value: string; sub?: string; trend?: string; trendDir?: 'up'|'down'|'flat';
-  icon: React.ElementType; accent: string;
+function KPICard({ label, value, sub, trend, variant }: {
+  label: string;
+  value: string;
+  sub?: string;
+  trend?: number | null;
+  variant: keyof typeof VARIANT;
 }) {
-  const TrendIcon = trendDir === 'up' ? TrendingUp : trendDir === 'down' ? TrendingDown : Minus;
-  const trendColor = trendDir === 'up' ? '#059669' : trendDir === 'down' ? '#dc2626' : '#2563eb';
-  const trendBg   = trendDir === 'up' ? '#ecfdf5' : trendDir === 'down' ? '#fef2f2' : '#eff6ff';
-
+  const v = VARIANT[variant];
+  const positive = (trend ?? 0) >= 0;
   return (
-    <div className="card p-4 relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-16 h-16 rounded-bl-full opacity-[0.06]" style={{ background: accent }} />
-      <div className="flex items-center justify-between mb-3">
-        <div className="w-9 h-9 rounded-[11px] flex items-center justify-center" style={{ background: accent + '18', color: accent }}>
-          <Icon size={17} />
-        </div>
-        {trend && (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold" style={{ background: trendBg, color: trendColor }}>
-            <TrendIcon size={9} />
-            {trend}
-          </div>
-        )}
+    <div style={{
+      background: '#fff',
+      border: `1px solid #EAE8FF`,
+      borderRadius: 14,
+      padding: '18px 20px',
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        position: 'absolute', top: 0, left: 0,
+        width: 4, height: '100%',
+        background: v.accent, borderRadius: '4px 0 0 4px',
+      }} />
+      <div style={{
+        fontSize: 10.5, fontWeight: 600, color: '#A5A3C8',
+        textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10,
+      }}>
+        {label}
       </div>
-      <div className="text-[20px] font-bold" style={{ color: 'var(--color-text)' }}>{value}</div>
-      <div className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{label}</div>
-      {sub && <div className="text-[10.5px] mt-1.5 pt-1.5 border-t" style={{ borderColor: 'var(--color-border-soft)', color: 'var(--color-text-muted)' }}>{sub}</div>}
+      <div style={{
+        fontSize: 22, fontWeight: 700, letterSpacing: '-0.8px',
+        color: v.text, lineHeight: 1, fontVariantNumeric: 'tabular-nums',
+      }}>
+        {value}
+      </div>
+      <div style={{
+        marginTop: 10, paddingTop: 10,
+        borderTop: '1px solid #F3F1FF',
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        {trend != null && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '2px 8px', borderRadius: 20, fontSize: 10.5, fontWeight: 600,
+            background: positive ? v.bg : '#FEF2F2',
+            color: positive ? v.text : '#DC2626',
+            border: `1px solid ${positive ? v.border : '#FECACA'}`,
+          }}>
+            {positive ? '↑' : '↓'} {Math.abs(trend).toFixed(1)}%
+          </span>
+        )}
+        {sub && <span style={{ fontSize: 10.5, color: '#A5A3C8' }}>{sub}</span>}
+      </div>
     </div>
   );
 }
 
+// ─── Account Table ──────────────────────────────────────────────────────────
+
+const GROUP_STYLE = {
+  asset:     { label: 'Aset',       color: '#7C3AED', bg: '#F5F3FF' },
+  liability: { label: 'Liabilitas', color: '#DC2626', bg: '#FEF2F2' },
+  equity:    { label: 'Ekuitas',    color: '#059669', bg: '#ECFDF5' },
+  revenue:   { label: 'Pendapatan', color: '#4F46E5', bg: '#EEF2FF' },
+  expense:   { label: 'Beban',      color: '#B45309', bg: '#FFFBEB' },
+};
+
+function AccountTable({
+  title, subtitle, badge, groups, grandTotalLabel, grandTotalValue
+}: {
+  title: string;
+  subtitle: string;
+  badge?: { label: string; color: string; bg: string; border: string };
+  groups: { type: keyof typeof GROUP_STYLE; rows: AccountRow[]; total: number }[];
+  grandTotalLabel: string;
+  grandTotalValue: number;
+}) {
+  return (
+    <div className="card" style={{ overflow: 'hidden' }}>
+      <div style={{
+        padding: '14px 18px 12px',
+        borderBottom: '1px solid #EAE8FF',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#1E1B4B' }}>{title}</div>
+          <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{subtitle}</div>
+        </div>
+        {badge && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '3px 10px', borderRadius: 20,
+            fontSize: 10.5, fontWeight: 600,
+            background: badge.bg, color: badge.color,
+            border: `1px solid ${badge.border}`,
+          }}>
+            {badge.label}
+          </span>
+        )}
+      </div>
+      <div style={{ maxHeight: 480, overflowY: 'auto' }}>
+        {groups.map(({ type, rows, total }) => {
+          const g = GROUP_STYLE[type];
+          if (!g || rows.length === 0) return null;
+          return (
+            <div key={type}>
+              <div style={{
+                padding: '7px 18px',
+                fontSize: 10.5, fontWeight: 700,
+                textTransform: 'uppercase', letterSpacing: '0.6px',
+                color: g.color, background: '#FAFAFF',
+                borderBottom: '1px solid #EAE8FF',
+              }}>
+                {g.label}
+              </div>
+              {rows.map((row, i) => (
+                <div key={i} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '8px 18px', borderBottom: '1px solid #F3F1FF', fontSize: 12,
+                }}>
+                  <span style={{ color: '#374151' }}>
+                    <span style={{
+                      color: '#A5A3C8', fontSize: 10.5,
+                      fontFamily: "'Fira Code', monospace", marginRight: 6,
+                    }}>
+                      {row.account_code}
+                    </span>
+                    {row.account_name}
+                  </span>
+                  <span style={{
+                    fontFamily: "'Fira Code', monospace",
+                    fontSize: 11.5, fontWeight: 500,
+                    color: row.balance >= 0 ? '#059669' : '#DC2626',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {fmt(row.balance)}
+                  </span>
+                </div>
+              ))}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '9px 18px', fontSize: 12, fontWeight: 600,
+                background: g.bg,
+                borderTop: '1px solid #EAE8FF', borderBottom: '1px solid #EAE8FF',
+              }}>
+                <span style={{ color: g.color }}>Total {g.label}</span>
+                <span style={{ fontFamily: "'Fira Code', monospace", color: g.color }}>{fmt(total)}</span>
+              </div>
+            </div>
+          );
+        })}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between',
+          padding: '12px 18px', fontSize: 13, fontWeight: 700,
+          background: 'linear-gradient(135deg, #7C3AED, #4F46E5)',
+          color: '#fff',
+        }}>
+          <span>{grandTotalLabel}</span>
+          <span style={{ fontFamily: "'Fira Code', monospace" }}>{fmt(grandTotalValue)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
+
 export default function DashboardPage() {
-  const [data, setData]       = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [now]                 = useState(new Date());
-  
-  // Filter states
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompany, setSelectedCompany] = useState('');
-  const [loadingCompanies, setLoadingCompanies] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<ConsolidatedData | null>(null);
+  const [tab, setTab] = useState<ActiveTab>('overview');
+  const [period, setPeriod] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [companyFilter, setCompanyFilter] = useState('');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const AUTO_REFRESH_MS = 5 * 60 * 1000;
 
-  const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-  const monthName = months[now.getMonth()];
-
-  // Fetch companies list
-  useEffect(() => {
-    const fetchCompanies = async () => {
-      try {
-        const res = await fetch('/api/companies?limit=100', {
-          credentials: 'include',
-        });
-        const json = await res.json();
-        if (json.success) {
-          setCompanies(json.data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch companies:', err);
-      } finally {
-        setLoadingCompanies(false);
-      }
-    };
-    fetchCompanies();
-  }, []);
-
-  const load = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set('month', String(now.getMonth() + 1));
-      params.set('year', String(now.getFullYear()));
-      if (selectedCompany) {
-        params.set('company', selectedCompany);
+      if (fromDate && toDate) {
+        params.append('from_date', fromDate);
+        params.append('to_date', toDate);
+      } else {
+        params.append('period', period);
       }
-      
-      const res = await fetch(`/api/dashboard?${params.toString()}`, {
-        credentials: 'include',
-      });
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        window.location.replace('/login');
-        return;
-      }
-      setData(json.data);
-    } catch (e) {
-      window.location.replace('/login');
+      if (companyFilter) params.append('company', companyFilter);
+      const res = await fetch(`/api/dashboard?${params}`);
+      const d = await res.json();
+      if (d.success) { setData(d.data); setLastUpdated(new Date()); }
+    } catch (err) {
+      console.error('Dashboard fetch error:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [period, fromDate, toDate, companyFilter]);
 
-  // Reload when company filter changes
+  useEffect(() => { fetchData(); }, [fetchData]);
+
   useEffect(() => {
-    load();
-  }, [selectedCompany]);
+    const id = setInterval(() => { fetchData(); }, AUTO_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [fetchData]);
 
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-4 gap-3">
-          {[...Array(4)].map((_, i) => <div key={i} className="skeleton h-28 rounded-2xl" />)}
-        </div>
-        <div className="grid grid-cols-5 gap-3">
-          {[...Array(5)].map((_, i) => <div key={i} className="skeleton h-16 rounded-xl" />)}
-        </div>
-        <div className="skeleton h-64 rounded-2xl" />
-      </div>
-    );
-  }
+  const periodLabel = fromDate && toDate
+    ? `${formatDate(fromDate)} – ${formatDate(toDate)}`
+    : `Periode ${period.split('-')[1]}/${period.split('-')[0]}`;
 
-  const f  = data?.financial;
-  const op = data?.operational;
+  const companies = data?.companies ?? [];
+  const selectedCompanyName = companies.find(c => c.company_code === companyFilter)?.name ?? 'Semua Perusahaan';
 
-  const maxCF = Math.max(...(data?.cashFlow ?? []).map((c) => Math.max(Number(c.revenue), Number(c.expense))), 1);
+  const bs = data?.balance_sheet;
+  const is_ = data?.income_statement;
+  const elim = data?.intercompany_elimination;
+  const isProfit = (is_?.net_income ?? 0) >= 0;
+  const elimBalanced = Math.abs((elim?.total_debit ?? 0) - (elim?.total_credit ?? 0)) < 1;
 
-  // Get selected company name for display
-  const selectedCompanyName = companies.find(c => c.company_code === selectedCompany)?.name;
+  const totalEquityWithNetIncome = (bs?.total_equity ?? 0) + (bs?.net_income ?? 0);
+  const totalLiabilitiesAndEquity = (bs?.total_liabilities ?? 0) + totalEquityWithNetIncome;
+  const isBalanced = Math.abs((bs?.total_assets ?? 0) - totalLiabilitiesAndEquity) < 1;
+  const netIncomeValue = bs?.net_income ?? is_?.net_income ?? 0;
+
+  const TAB_LABELS = { overview: 'Overview', balance_sheet: 'Neraca', income_statement: 'Laba Rugi' };
 
   return (
-    <div className="space-y-4 max-w-[1400px]">
-      {/* Header with company filter */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-[19px] font-bold" style={{ color: 'var(--color-text)' }}>Dashboard</h1>
-          <p className="text-[12px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            {now.toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' })} · {monthName} {now.getFullYear()}
-          </p>
+    <div>
+      {/* Header */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.4px', color: '#1E1B4B' }}>
+              Laporan Keuangan Konsolidasi
+            </h1>
+            <p style={{ fontSize: 12, color: '#6B7280', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {periodLabel}
+              <span style={{ color: '#DDD6FE' }}>·</span>
+              {selectedCompanyName}
+              {data && (
+                <span className="badge badge-purple">
+                  {companies.length} entitas
+                </span>
+              )}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {lastUpdated && !loading && (
+              <span style={{ fontSize: 10.5, color: '#A5A3C8' }}>
+                Diperbarui {lastUpdated.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <button className="btn btn-outline btn-sm" onClick={fetchData} disabled={loading}>
+              {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              {loading ? 'Memuat...' : 'Refresh'}
+            </button>
+          </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {/* Company Filter Dropdown */}
+
+        {/* Filter bar */}
+        <div className="card" style={{ padding: '10px 14px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select
-            className="input input-sm"
-            value={selectedCompany}
-            onChange={(e) => setSelectedCompany(e.target.value)}
-            disabled={loadingCompanies}
-            style={{ minWidth: '200px' }}
+            value={companyFilter}
+            onChange={e => setCompanyFilter(e.target.value)}
+            className="input text-[12px] py-1.5"
+            style={{ width: 190 }}
           >
             <option value="">Semua Perusahaan</option>
-            {companies.map((comp) => (
-              <option key={comp.company_code} value={comp.company_code}>
-                {comp.name}
-              </option>
+            {companies.map(c => (
+              <option key={c.company_code} value={c.company_code}>{c.name}</option>
             ))}
           </select>
-          
-          <button className="btn btn-outline btn-sm" onClick={load}>
-            <RefreshCw size={12} /> Refresh
-          </button>
-          <button className="btn btn-outline btn-sm">
-            <Download size={12} /> Export
-          </button>
+
+          <div style={{ width: 1, height: 22, background: '#EAE8FF', flexShrink: 0 }} />
+
+          <input
+            type="month"
+            value={period}
+            onChange={e => { setPeriod(e.target.value); setFromDate(''); setToDate(''); }}
+            className="input text-[12px] py-1.5"
+            style={{ width: 148 }}
+          />
+
+          <span style={{ fontSize: 11, color: '#A5A3C8', flexShrink: 0 }}>atau</span>
+
+          <input
+            type="date"
+            value={fromDate}
+            onChange={e => setFromDate(e.target.value)}
+            className="input text-[12px] py-1.5"
+            style={{ width: 140 }}
+          />
+          <span style={{ fontSize: 12, color: '#A5A3C8', flexShrink: 0 }}>–</span>
+          <input
+            type="date"
+            value={toDate}
+            onChange={e => setToDate(e.target.value)}
+            className="input text-[12px] py-1.5"
+            style={{ width: 140 }}
+          />
         </div>
       </div>
 
-      {/* Active filter indicator */}
-      {selectedCompany && selectedCompanyName && (
-        <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'var(--color-bg-soft)' }}>
-          <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-            Menampilkan data untuk:{' '}
-            <span className="font-medium" style={{ color: 'var(--color-primary)' }}>
-              {selectedCompanyName}
-            </span>
-          </span>
-          <button 
-            className="text-[10px] hover:underline ml-1" 
-            onClick={() => setSelectedCompany('')}
-            style={{ color: 'var(--color-primary)' }}
-          >
-            Clear Filter
+      {/* Tabs */}
+      <div style={{
+        display: 'flex', gap: 2, marginBottom: 16,
+        background: '#F5F3FF',
+        border: '1px solid #EAE8FF',
+        borderRadius: 10, padding: 3, width: 'fit-content',
+      }}>
+        {(['overview', 'balance_sheet', 'income_statement'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{
+            padding: '5px 16px', borderRadius: 7, fontSize: 12, fontWeight: 500,
+            cursor: 'pointer', border: 'none', transition: '0.15s',
+            background: tab === t ? '#fff' : 'transparent',
+            color: tab === t ? '#7C3AED' : '#6B7280',
+            boxShadow: tab === t ? '0 1px 4px rgba(124,58,237,0.12)' : 'none',
+            fontFamily: 'inherit',
+          }}>
+            {TAB_LABELS[t]}
           </button>
-        </div>
-      )}
-
-      {/* Financial KPIs */}
-      <div className="grid grid-cols-4 gap-3">
-        <StatCard label={`Revenue ${monthName}`} value={formatRupiahCompact(f?.revenue)} trend="+12.4%" trendDir="up"
-          sub="Target Rp 300 Jt · 82% tercapai" icon={TrendingUp} accent="#7c3aed" />
-        <StatCard label={`Total Expense ${monthName}`} value={formatRupiahCompact(f?.expense)} trend="-3.1%" trendDir="down"
-          sub={`PO: ${formatRupiahCompact((f?.expense ?? 0) * 0.77)} · Reimburse: ${formatRupiahCompact((f?.expense ?? 0) * 0.23)}`} icon={ShoppingCart} accent="#4f46e5" />
-        <StatCard label="Gross Profit" value={formatRupiahCompact(f?.grossProfit)} trend={`${f?.margin ?? 0}%`} trendDir="up"
-          sub={`Margin ${f?.margin ?? 0}% bulan ini`} icon={TrendingUp} accent="#059669" />
-        <StatCard label="Outstanding AR" value={formatRupiahCompact(f?.totalAR)} trendDir="flat"
-          sub="3 invoice overdue > 30 hari" icon={AlertCircle} accent="#d97706" />
-      </div>
-
-      {/* Operational Strip */}
-      <div className="grid grid-cols-5 gap-3">
-        {[
-          { label: 'SO Aktif',             val: op?.soActive ?? 0,          color: '#7c3aed', bg: '#f5f3ff',  icon: FileText },
-          { label: 'PO Tunggu SPV',        val: op?.poPendingSPV ?? 0,       color: '#d97706', bg: '#fffbeb',  icon: ShoppingCart },
-          { label: 'PO Tunggu Finance',    val: op?.poPendingFinance ?? 0,   color: '#2563eb', bg: '#eff6ff',  icon: ShoppingCart },
-          { label: 'Reimburse Pending',    val: op?.reimbursePending ?? 0,   color: '#dc2626', bg: '#fef2f2',  icon: AlertCircle },
-          { label: 'DO In Transit',        val: op?.doInTransit ?? 0,        color: '#0891b2', bg: '#ecfeff',  icon: Truck },
-        ].map((item) => (
-          <div key={item.label} className="card p-3 flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-[9px] flex items-center justify-center flex-shrink-0" style={{ background: item.bg, color: item.color }}>
-              <item.icon size={15} />
-            </div>
-            <div>
-              <div className="text-[16px] font-bold" style={{ color: item.color }}>{item.val}</div>
-              <div className="text-[10.5px]" style={{ color: 'var(--color-text-muted)' }}>{item.label}</div>
-            </div>
-          </div>
         ))}
       </div>
 
-      {/* Main Row: Chart + Alerts */}
-      <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 320px' }}>
-        {/* Cash Flow Chart */}
-        <div className="card p-4">
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <div className="text-[13px] font-bold" style={{ color: 'var(--color-text)' }}>Cash Flow — 6 Bulan Terakhir</div>
-              <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Revenue masuk vs expense keluar</div>
-            </div>
-            <button className="flex items-center gap-1 text-[11px] font-medium" style={{ color: 'var(--color-primary)' }}>
-              Detail <ArrowRight size={11} />
-            </button>
+      {loading && (
+        <div className="card p-10 flex items-center justify-center gap-3">
+          <Loader2 size={20} className="animate-spin" style={{ color: '#7C3AED' }} />
+          <span style={{ fontSize: 13, color: '#6B7280' }}>Memuat data konsolidasi...</span>
+        </div>
+      )}
+
+      {!loading && data && bs && is_ && (
+        <>
+          {/* KPI Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+            <KPICard label="Total Aset"      value={fmt(bs.total_assets)}           variant="purple" />
+            <KPICard label="Total Liabilitas" value={fmt(bs.total_liabilities)}       variant="red" />
+            <KPICard label="Total Ekuitas"   value={fmt(totalEquityWithNetIncome)}   sub="termasuk Laba/Rugi Berjalan" variant="green" />
+            <KPICard label="Laba Bersih"     value={fmt(is_.net_income)}             sub={isProfit ? 'Laba' : 'Rugi'} variant={isProfit ? 'indigo' : 'red'} />
           </div>
 
-          {/* Bars */}
-          <div className="flex items-flex-end gap-1.5" style={{ height: 120, alignItems: 'flex-end' }}>
-            <div className="flex flex-col justify-between h-full pr-2" style={{ minWidth: 36 }}>
-              {['Max','50%','0'].map((l) => <span key={l} className="text-[9px]" style={{ color: 'var(--color-text-muted)' }}>{l}</span>)}
+          {/* Tab: Overview or Balance Sheet */}
+          {(tab === 'overview' || tab === 'balance_sheet') && (
+            <div style={{
+              display: tab === 'overview' ? 'grid' : 'block',
+              gridTemplateColumns: tab === 'overview' ? '1fr 1fr' : undefined,
+              gap: 12, marginBottom: 12,
+            }}>
+              <AccountTable
+                title="Neraca (Balance Sheet)"
+                subtitle={`Per ${periodLabel}`}
+                badge={isBalanced
+                  ? { label: '✓ Balanced', color: '#059669', bg: '#ECFDF5', border: '#A7F3D0' }
+                  : { label: '! Unbalanced', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' }
+                }
+                groups={[
+                  { type: 'asset',     rows: bs.data.filter(r => r.account_type === 'asset'),     total: bs.total_assets },
+                  { type: 'liability', rows: bs.data.filter(r => r.account_type === 'liability'), total: bs.total_liabilities },
+                  {
+                    type: 'equity',
+                    rows: [
+                      ...bs.data.filter(r => r.account_type === 'equity'),
+                      ...(netIncomeValue !== 0 ? [{
+                        account_code: '--',
+                        account_name: 'Laba/Rugi Berjalan',
+                        account_type: 'equity' as const,
+                        balance: netIncomeValue,
+                      }] : []),
+                    ],
+                    total: totalEquityWithNetIncome,
+                  },
+                ]}
+                grandTotalLabel="TOTAL ASET"
+                grandTotalValue={bs.total_assets}
+              />
+
+              {tab === 'overview' && (
+                <AccountTable
+                  title="Laba Rugi (Income Statement)"
+                  subtitle={`Periode ${periodLabel}`}
+                  badge={isProfit
+                    ? { label: 'Laba', color: '#059669', bg: '#ECFDF5', border: '#A7F3D0' }
+                    : { label: 'Rugi', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' }
+                  }
+                  groups={[
+                    { type: 'revenue', rows: is_.data.filter(r => r.account_type === 'revenue'), total: is_.total_revenue },
+                    { type: 'expense', rows: is_.data.filter(r => r.account_type === 'expense'), total: is_.total_expense },
+                  ]}
+                  grandTotalLabel="LABA BERSIH"
+                  grandTotalValue={is_.net_income}
+                />
+              )}
             </div>
-            {(data?.cashFlow ?? []).map((c, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
-                <div className="flex gap-1 items-end w-full">
-                  <div className="flex-1 rounded-t-[3px] transition-all hover:opacity-80"
-                    style={{ height: `${(Number(c.revenue) / maxCF) * 110}px`, background: '#7c3aed', minHeight: 2 }} />
-                  <div className="flex-1 rounded-t-[3px] transition-all hover:opacity-80"
-                    style={{ height: `${(Number(c.expense) / maxCF) * 110}px`, background: '#a5b4fc', minHeight: 2 }} />
+          )}
+
+          {/* Tab: Income Statement only */}
+          {tab === 'income_statement' && (
+            <div style={{ marginBottom: 12 }}>
+              <AccountTable
+                title="Laba Rugi (Income Statement)"
+                subtitle={`Periode ${periodLabel}`}
+                badge={isProfit
+                  ? { label: 'Laba', color: '#059669', bg: '#ECFDF5', border: '#A7F3D0' }
+                  : { label: 'Rugi', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' }
+                }
+                groups={[
+                  { type: 'revenue', rows: is_.data.filter(r => r.account_type === 'revenue'), total: is_.total_revenue },
+                  { type: 'expense', rows: is_.data.filter(r => r.account_type === 'expense'), total: is_.total_expense },
+                ]}
+                grandTotalLabel="LABA BERSIH"
+                grandTotalValue={is_.net_income}
+              />
+            </div>
+          )}
+
+          {/* Intercompany Elimination */}
+          <div className="card" style={{ padding: '16px 20px', marginTop: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1E1B4B' }}>Eliminasi Intercompany</div>
+                <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>
+                  Transaksi antar entitas yang dieliminasi dalam konsolidasi
                 </div>
-                <div className="text-[9px]" style={{ color: 'var(--color-text-muted)' }}>{c.month_label}</div>
               </div>
-            ))}
-          </div>
+              {elimBalanced
+                ? <span className="badge badge-green" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <CheckCircle2 size={11} /> Balanced
+                  </span>
+                : <span className="badge badge-red" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <AlertCircle size={11} /> Selisih!
+                  </span>
+              }
+            </div>
 
-          <div className="flex gap-4 mt-3 pt-3" style={{ borderTop: '1px solid var(--color-border-soft)' }}>
-            {[['#7c3aed','Revenue'],['#a5b4fc','Expense']].map(([c,l]) => (
-              <div key={l} className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
-                <div className="w-2.5 h-2.5 rounded-[3px]" style={{ background: c }} /> {l}
-              </div>
-            ))}
-          </div>
-
-          {/* CA Strip */}
-          <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--color-border-soft)' }}>
-            <div className="text-[12.5px] font-bold mb-2.5" style={{ color: 'var(--color-text)' }}>Cash Advance & Reimbursement</div>
-            <div className="grid grid-cols-3 gap-2.5">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 16 }}>
               {[
-                { label: 'CA Outstanding',       val: data?.ca.outstanding,       color: '#7c3aed', pct: 65 },
-                { label: 'Reimburse Pending',    val: op?.reimbursePending,       color: '#4f46e5', pct: 35, isCount: true },
-                { label: 'CA Siap Dikembalikan', val: data?.ca.siapDikembalikan,  color: '#059669', pct: 20 },
-              ].map((c) => (
-                <div key={c.label} className="rounded-xl p-3" style={{ background: '#f9f8ff' }}>
-                  <div className="text-[14px] font-bold" style={{ color: c.color }}>
-                    {c.isCount ? c.val : formatRupiahCompact(c.val as number)}
+                { label: 'Eliminasi Debit',  val: elim?.total_debit ?? 0,  color: '#059669', bg: '#ECFDF5' },
+                { label: 'Eliminasi Kredit', val: elim?.total_credit ?? 0, color: '#DC2626', bg: '#FEF2F2' },
+                { label: 'Selisih (harus 0)',
+                  val: Math.abs((elim?.total_debit ?? 0) - (elim?.total_credit ?? 0)),
+                  color: elimBalanced ? '#059669' : '#DC2626',
+                  bg: elimBalanced ? '#ECFDF5' : '#FEF2F2',
+                },
+              ].map(({ label, val, color, bg }) => (
+                <div key={label} style={{ background: bg, borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 10.5, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                    {label}
                   </div>
-                  <div className="text-[10.5px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{c.label}</div>
-                  <div className="mt-2 h-1 rounded-full" style={{ background: 'var(--color-border)' }}>
-                    <div className="h-full rounded-full" style={{ width: `${c.pct}%`, background: c.color }} />
+                  <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fira Code', monospace", color }}>
+                    {fmt(val)}
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-        </div>
 
-        {/* Alerts */}
-        <div className="card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <div className="text-[13px] font-bold" style={{ color: 'var(--color-text)' }}>Butuh Perhatian</div>
-              <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Items yang perlu action segera</div>
-            </div>
-            <div className="px-2 py-0.5 rounded-full text-[10.5px] font-bold" style={{ background: '#fee2e2', color: '#dc2626' }}>
-              {data?.pendingAlerts?.length ?? 0}
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #EAE8FF', fontSize: 10.5, color: '#A5A3C8', lineHeight: 1.6 }}>
+              * Mencakup: Piutang Inter-Co (akun 1150) dan Hutang Inter-Co (akun 2150) antar entitas konsolidasi
             </div>
           </div>
-          <div className="space-y-2">
-            {(data?.pendingAlerts ?? []).slice(0, 6).map((alert, i) => {
-              const isUrgent = alert.days_waiting > 2;
-              const isWarn   = alert.days_waiting > 0;
-              const bg    = isUrgent ? '#fff8f8' : isWarn ? '#fffdf0' : '#f0f9ff';
-              const border = isUrgent ? '#fecaca' : isWarn ? '#fde68a' : '#bae6fd';
-              const iconBg = isUrgent ? '#fee2e2' : isWarn ? '#fef3c7' : '#dbeafe';
-              const iconC  = isUrgent ? '#dc2626' : isWarn ? '#d97706' : '#2563eb';
-
-              return (
-                <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-[10px] border cursor-pointer hover:opacity-90 transition-all"
-                  style={{ background: bg, borderColor: border }}>
-                  <div className="w-7 h-7 rounded-[7px] flex items-center justify-center flex-shrink-0" style={{ background: iconBg, color: iconC }}>
-                    <Bell size={13} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[11.5px] font-semibold truncate" style={{ color: 'var(--color-text)' }}>{alert.ref_code}</div>
-                    <div className="text-[10.5px] truncate" style={{ color: 'var(--color-text-muted)' }}>
-                      {alert.party} · {formatRupiahCompact(alert.amount)}
-                    </div>
-                  </div>
-                  <div className="text-[10px] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-                    {alert.days_waiting}h
-                  </div>
-                </div>
-              );
-            })}
-            {(!data?.pendingAlerts || data.pendingAlerts.length === 0) && (
-              <div className="text-center py-6 text-[12px]" style={{ color: 'var(--color-text-muted)' }}>
-                Tidak ada alert
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Row */}
-      <div className="grid grid-cols-3 gap-3">
-        {/* Top Customers */}
-        <div className="card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-[13px] font-bold" style={{ color: 'var(--color-text)' }}>Top Customers</div>
-            <button className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--color-primary)' }}>Semua <ArrowRight size={11} /></button>
-          </div>
-          <div className="space-y-1">
-            {(data?.topCustomers ?? []).length === 0 && (
-              <div className="text-center py-6 text-[12px]" style={{ color: 'var(--color-text-muted)' }}>
-                Tidak ada data customer
-              </div>
-            )}
-            {(data?.topCustomers ?? []).map((c, i) => {
-              const maxVal = data?.topCustomers[0]?.total_value ?? 1;
-              const [bg, color] = AVATAR_COLORS[i % AVATAR_COLORS.length];
-              return (
-                <div key={i} className="flex items-center gap-2.5 py-2" style={{ borderBottom: i < (data?.topCustomers.length ?? 0) - 1 ? '1px solid var(--color-border-soft)' : 'none' }}>
-                  <div className="w-8 h-8 rounded-[9px] flex items-center justify-center text-[10px] font-bold flex-shrink-0" style={{ background: bg, color }}>
-                    {c.customer_name.slice(0,2).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12px] font-medium truncate" style={{ color: 'var(--color-text)' }}>{c.customer_name}</div>
-                    <div className="text-[10.5px]" style={{ color: 'var(--color-text-muted)' }}>{c.order_count} orders</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[12px] font-semibold" style={{ color: 'var(--color-text)' }}>{formatRupiahCompact(c.total_value)}</div>
-                    <div className="mt-1 w-14 h-1 rounded-full" style={{ background: 'var(--color-border)' }}>
-                      <div className="h-full rounded-full" style={{ width: `${(c.total_value / maxVal) * 100}%`, background: color }} />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-[13px] font-bold" style={{ color: 'var(--color-text)' }}>Aktivitas Terbaru</div>
-            <button className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--color-primary)' }}>Semua <ArrowRight size={11} /></button>
-          </div>
-          <div className="space-y-0">
-            {(data?.recentActivity ?? []).length === 0 && (
-              <div className="text-center py-6 text-[12px]" style={{ color: 'var(--color-text-muted)' }}>
-                Tidak ada aktivitas
-              </div>
-            )}
-            {(data?.recentActivity ?? []).slice(0, 7).map((act, i) => (
-              <div key={i} className="flex items-start gap-2.5 py-2.5" style={{ borderBottom: i < 6 ? '1px solid var(--color-border-soft)' : 'none' }}>
-                <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: TYPE_COLOR[act.type] ?? '#9ca3af' }} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12px] leading-snug" style={{ color: '#374151' }}>
-                    <span className="font-semibold" style={{ color: 'var(--color-text)' }}>{act.code}</span>
-                    {' · '}{act.party}
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[11px] font-medium" style={{ color: TYPE_COLOR[act.type] }}>{formatRupiahCompact(act.amount)}</span>
-                    <span className="text-[10.5px]" style={{ color: 'var(--color-text-muted)' }}>{formatRelativeTime(act.created_at)}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Delivery Status */}
-        <div className="card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-[13px] font-bold" style={{ color: 'var(--color-text)' }}>Status Pengiriman</div>
-            <button className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--color-primary)' }}>Semua <ArrowRight size={11} /></button>
-          </div>
-          <div className="space-y-0">
-            {(data?.deliveries ?? []).length === 0 && (
-              <div className="text-center py-6 text-[12px]" style={{ color: 'var(--color-text-muted)' }}>Tidak ada pengiriman aktif</div>
-            )}
-            {(data?.deliveries ?? []).map((d, i) => (
-              <div key={i} className="flex items-center justify-between py-2.5" style={{ borderBottom: i < (data?.deliveries.length ?? 0) - 1 ? '1px solid var(--color-border-soft)' : 'none' }}>
-                <div className="min-w-0">
-                  <div className="text-[11px] font-mono" style={{ color: '#7c3aed' }}>{d.do_code}</div>
-                  <div className="text-[12px] font-medium truncate" style={{ color: 'var(--color-text)' }}>{d.so_code}</div>
-                  <div className="text-[10.5px]" style={{ color: 'var(--color-text-muted)' }}>{d.courier || '-'}</div>
-                </div>
-                <div className="text-right ml-3">
-                  <div className={`badge ${d.status === 'shipped' ? 'badge-purple' : 'badge-blue'}`}>
-                    {d.status === 'shipped' ? 'Dikirim' : 'Dibuat'}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

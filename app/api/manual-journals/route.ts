@@ -67,10 +67,12 @@ export const POST = withAuth(async (req: NextRequest, user) => {
       [code, description, transaction_date, reference??null, totalDebit, user.user_code]
     );
 
-    for (const item of items as any[]) {
+    for (let idx = 0; idx < (items as any[]).length; idx++) {
+      const item = (items as any[])[idx];
+      const itemCode = `JNI-${Date.now()}-${idx + 1}`;
       await query(
-        `INSERT INTO journal_items (journal_code,account_code,debit_amount,credit_amount,description,created_at) VALUES (?,?,?,?,?,NOW())`,
-        [code, item.account_code, item.debit_amount??0, item.credit_amount??0, item.description??null]
+        `INSERT INTO journal_items (journal_item_code,journal_code,account_code,debit_amount,credit_amount,description,created_at) VALUES (?,?,?,?,?,?,NOW())`,
+        [itemCode, code, item.account_code, item.debit_amount??0, item.credit_amount??0, item.description??null]
       );
     }
 

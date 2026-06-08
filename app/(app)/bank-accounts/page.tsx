@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { usePaginated } from '@/hooks/useApi';
 import { formatRupiah, formatDate } from '@/lib/utils';
 import { Plus, Search, Eye, X, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface BankAccount {
   id: number; account_code: string; bank_name: string; account_number: string;
@@ -28,7 +29,9 @@ export default function BankAccountsPage() {
       setShowCreate(false);
       setForm({ bank_name:'', account_number:'', account_holder:'', branch:'', currency:'IDR', description:'' });
       setSearch('');
-    } catch {}
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Gagal menyimpan rekening');
+    }
     setSaving(false);
   };
 

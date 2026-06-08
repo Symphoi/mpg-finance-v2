@@ -56,12 +56,12 @@ export const POST = withAuth(async (req: NextRequest, user) => {
       return badRequest('employee_name, purpose, total_amount wajib diisi');
     }
 
-    const seq = await queryOne<{ current_value: number }>(
-      `SELECT * FROM numbering_sequences WHERE document_type='cash_advance' AND is_active=1 LIMIT 1`
+    const seq: any = await queryOne(
+      `SELECT next_number, prefix FROM numbering_sequences WHERE sequence_code = 'CA' LIMIT 1`
     );
     const now     = new Date();
     const ym      = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;
-    const nextNum = (seq?.current_value ?? 0) + 1;
+    const nextNum = seq ? seq.next_number : 1;
     const caCode  = `CA-${ym}-${String(nextNum).padStart(4, '0')}`;
 
     await query(`
@@ -76,7 +76,9 @@ export const POST = withAuth(async (req: NextRequest, user) => {
         document_urls ? JSON.stringify(document_urls) : null, user.user_code]);
 
     if (seq) {
-      await query(`UPDATE numbering_sequences SET current_value=? WHERE document_type='cash_advance'`, [nextNum]);
+      await query(`UPDATE numbering_sequences SET next_number=? WHERE sequence_code='CA'`, [nextNum + 1]);
+    } else {
+      await query(`INSERT INTO numbering_sequences (sequence_code, prefix, next_number, description) VALUES ('CA','CA',2,'Cash Advance')`);
     }
 
     return created({ ca_code: caCode });

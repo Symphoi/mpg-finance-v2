@@ -60,13 +60,13 @@ export const POST = withAuth(async (req: NextRequest, user) => {
 
     if (!title || !items?.length) return badRequest('title dan items wajib diisi');
 
-    const seq = await queryOne<{ current_value: number }>(
-      `SELECT * FROM numbering_sequences WHERE document_type='reimbursement' AND is_active=1 LIMIT 1`
+    const seq: any = await queryOne(
+      `SELECT next_number, prefix FROM numbering_sequences WHERE sequence_code = 'REIMB' LIMIT 1`
     );
     const now     = new Date();
     const year    = now.getFullYear();
-    const nextNum = (seq?.current_value ?? 0) + 1;
-    const reimCode = `REIM-${year}-${String(nextNum).padStart(4, '0')}`;
+    const nextNum = seq ? seq.next_number : 1;
+    const reimCode = `REIMB-${year}-${String(nextNum).padStart(4, '0')}`;
 
     const totalAmount = (items as any[]).reduce((s: number, i: any) => s + Number(i.amount), 0);
 
@@ -100,7 +100,9 @@ export const POST = withAuth(async (req: NextRequest, user) => {
     }
 
     if (seq) {
-      await query(`UPDATE numbering_sequences SET current_value=? WHERE document_type='reimbursement'`, [nextNum]);
+      await query(`UPDATE numbering_sequences SET next_number=? WHERE sequence_code='REIMB'`, [nextNum + 1]);
+    } else {
+      await query(`INSERT INTO numbering_sequences (sequence_code, prefix, next_number, description) VALUES ('REIMB','REIMB',2,'Reimbursement')`);
     }
 
     return created({ reimbursement_code: reimCode, total_amount: totalAmount });

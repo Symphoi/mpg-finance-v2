@@ -9,9 +9,9 @@ const pool = mysql.createPool({
   database:         process.env.DB_NAME,
   port:             parseInt(process.env.DB_PORT ?? '3306'),
   waitForConnections: true,
-  connectionLimit:  10,
+  connectionLimit:  200,
   queueLimit:       0,
-  connectTimeout:   30000,
+  connectTimeout:   10000,
   // Optional: Fix type casting for TINYINT(1) to boolean
   typeCast: function (field: any, next: any) {
     if (field.type === 'TINY' && field.length === 1) {
@@ -25,17 +25,11 @@ export async function query<T = unknown>(sql: string, params: unknown[] = []): P
   // FIX: Convert all number parameters to string to fix ER_WRONG_ARGUMENTS error
   // This is needed because some MySQL/mysql2 versions have issues with LIMIT ? OFFSET ?
   const fixedParams = params.map(p => {
-    // Convert numbers to strings to avoid the error
-    if (typeof p === 'number') {
-      return String(p);
-    }
-    // Handle null/undefined
-    if (p === null || p === undefined) {
-      return null;
-    }
+    if (typeof p === 'number') return String(p);
+    if (p === null || p === undefined) return null;
     return p;
-  });
-  
+  }) as (string | null | boolean | Buffer)[];
+
   try {
     const [rows] = await pool.execute(sql, fixedParams);
     return rows as T[];

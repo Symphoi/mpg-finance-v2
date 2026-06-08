@@ -1,9 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import {
-  LayoutDashboard, FileText, ShoppingCart, CheckSquare, Truck, FileInvoice,
+  LayoutDashboard, FileText, ShoppingCart, CheckSquare, Truck, FileCheck,
   Wallet, Receipt, Calculator, Building, Users, Package, Shield, Percent,
   ListOrdered, Tag, ChevronDown, Settings, LogOut, Bell, Search,
   BookOpen, GitBranch, Landmark, Scale
@@ -50,8 +50,18 @@ const NAV: NavItem[] = [
       { label: 'Kas & Bank',          href: '/bank-accounts' },
       { label: 'Rekonsiliasi',        href: '/bank-reconciliations' },
       { label: 'Manual Journal',      href: '/manual-journals' },
+      { label: 'Intercompany',        href: '/intercompany' },
       { label: 'Chart of Account',    href: '/chart-of-account' },
       { label: 'Accounting Rules',    href: '/accounting-rules' },
+    ],
+  },
+  {
+    label: 'Laporan', icon: BookOpen,
+    children: [
+      { label: 'Trial Balance',       href: '/trial-balance' },
+      { label: 'General Ledger',      href: '/general-ledger' },
+      { label: 'Income Statement',    href: '/income-statement' },
+      { label: 'Balance Sheet',       href: '/balance-sheet' },
     ],
   },
 ];
@@ -147,6 +157,13 @@ function NavItem({ item }: { item: NavItem }) {
 }
 
 export default function Sidebar() {
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    router.push('/login');
+  };
+
   return (
     <aside
       className="flex flex-col flex-shrink-0 overflow-hidden"
@@ -186,17 +203,20 @@ export default function Sidebar() {
 
       {/* User */}
       <div className="p-3 border-t border-white/8">
-        <div className="flex items-center gap-2.5 p-2.5 rounded-[10px] cursor-pointer hover:bg-white/6 transition-all group">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-2.5 p-2.5 rounded-[10px] hover:bg-white/6 transition-all group text-left"
+        >
           <div className="w-8 h-8 rounded-[9px] flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0"
             style={{ background: 'linear-gradient(135deg,#f59e0b,#ef4444)' }}>
             AD
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-white text-[12.5px] font-medium truncate">Admin User</div>
-            <div className="text-white/35 text-[10.5px]">Administrator</div>
+            <div className="text-white/35 text-[10.5px]">Klik untuk keluar</div>
           </div>
-          <LogOut size={14} className="text-white/25 group-hover:text-white/50 transition-colors" />
-        </div>
+          <LogOut size={14} className="text-white/25 group-hover:text-red-400 transition-colors" />
+        </button>
       </div>
     </aside>
   );

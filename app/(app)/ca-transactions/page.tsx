@@ -1,8 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { formatRupiah, formatDate, CA_STATUS } from '@/lib/utils';
-import { usePaginated } from '@/hooks/useApi';
-import { Plus, Search, Filter, Eye, X, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import { usePaginated, useDebounce } from '@/hooks/useApi';
+import { Plus, Search, Eye, X, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface CA {
@@ -30,6 +30,9 @@ export default function CATransactionsPage() {
 
   const [search, setSearchLocal] = useState('');
   const [detail, setDetail]      = useState<CA | null>(null);
+  const debouncedSearch          = useDebounce(search, 400);
+
+  useEffect(() => { setSearch(debouncedSearch); }, [debouncedSearch]);
 
   return (
     <div className="space-y-4 max-w-[1400px]">
@@ -49,8 +52,7 @@ export default function CATransactionsPage() {
             <div className="relative">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
               <input className="input" style={{ paddingLeft: 32 }} placeholder="Kode CA, nama, keperluan..."
-                value={search} onChange={(e) => setSearchLocal(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && setSearch(search)} />
+                value={search} onChange={(e) => setSearchLocal(e.target.value)} />
             </div>
           </div>
           <div>
@@ -59,7 +61,6 @@ export default function CATransactionsPage() {
               {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setSearch(search)}><Filter size={12} /> Cari</button>
         </div>
       </div>
 

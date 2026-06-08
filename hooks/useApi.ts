@@ -1,6 +1,15 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 
+export function useDebounce<T>(value: T, delay = 400): T {
+  const [debounced, setDebounced] = useState<T>(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
+
 interface UseApiOptions {
   immediate?: boolean;
 }
@@ -49,11 +58,6 @@ export function usePaginated<T>(baseUrl: string, initialParams: Record<string, s
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState<string | null>(null);
 
-  const buildUrl = () => {
-    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
-    return `${baseUrl}?${qs}`;
-  };
-
   const load = useCallback(async (overrideParams?: Record<string, string>) => {
     const merged = { ...params, ...(overrideParams ?? {}) };
     const qs = new URLSearchParams(Object.entries(merged).filter(([, v]) => v));
@@ -75,9 +79,10 @@ export function usePaginated<T>(baseUrl: string, initialParams: Record<string, s
   useEffect(() => { load(); }, [baseUrl, JSON.stringify(params)]);
 
   const setParam  = (key: string, value: string) => setParams((p) => ({ ...p, [key]: value, page: '1' }));
-  const setPage   = (page: number) => setParams((p) => ({ ...p, page: String(page) }));
+  const setPage   = (page: number)   => setParams((p) => ({ ...p, page: String(page) }));
+  const setLimit  = (limit: number)  => setParams((p) => ({ ...p, limit: String(limit), page: '1' }));
   const setSearch = (search: string) => setParam('search', search);
   const setStatus = (status: string) => setParam('status', status);
 
-  return { data, meta, loading, error, refetch: load, setParam, setPage, setSearch, setStatus, params };
+  return { data, meta, loading, error, refetch: load, setParam, setPage, setLimit, setSearch, setStatus, params };
 }
