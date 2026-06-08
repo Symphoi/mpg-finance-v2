@@ -249,8 +249,21 @@ export default function GeneralLedgerPage() {
 
       <style>{`
         @media print {
-          .no-print { display: none !important; }
-          body { background: white !important; }
+          #general-ledger-content { max-width: 100% !important; }
+          #general-ledger-content table {
+            font-size: 9px !important;
+            width: 100% !important;
+          }
+          #general-ledger-content table thead { display: table-header-group !important; }
+          #general-ledger-content table tr    { break-inside: avoid !important; }
+          #general-ledger-content table th,
+          #general-ledger-content table td    { padding: 4px 8px !important; font-size: 9px !important; }
+          /* Each account group can break to new page if needed */
+          #general-ledger-content .card { break-inside: auto !important; }
+          #general-ledger-content table tr:last-child {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
         }
       `}</style>
     </div>

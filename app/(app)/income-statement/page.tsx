@@ -228,8 +228,19 @@ export default function IncomeStatementPage() {
 
       <style>{`
         @media print {
-          .no-print { display: none !important; }
-          body { background: white !important; }
+          #is-content { max-width: 100% !important; }
+          #is-content table {
+            font-size: 9px !important;
+            width: 100% !important;
+          }
+          #is-content table thead { display: table-header-group !important; }
+          #is-content table tr    { break-inside: avoid !important; }
+          #is-content table th,
+          #is-content table td    { padding: 4px 8px !important; font-size: 9px !important; }
+          #is-content table tr:last-child {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
         }
       `}</style>
     </div>

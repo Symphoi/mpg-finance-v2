@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import { formatRupiah, formatDate, CA_STATUS } from '@/lib/utils';
 import { usePaginated, useDebounce } from '@/hooks/useApi';
-import { Plus, Search, Eye, X, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import { Plus, Search, Eye, X, FileText } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 import { toast } from 'sonner';
 
 interface CA {
@@ -107,15 +108,7 @@ export default function CATransactionsPage() {
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: '1px solid var(--color-border-soft)' }}>
-          <div className="text-[12px]" style={{ color: 'var(--color-text-muted)' }}>
-            {meta.total > 0 ? `${((meta.page-1)*meta.limit)+1}–${Math.min(meta.page*meta.limit,meta.total)} dari ${meta.total}` : '0 data'}
-          </div>
-          <div className="pagination">
-            <button className="page-btn" disabled={meta.page <= 1} onClick={() => setPage(meta.page - 1)}><ChevronLeft size={13} /></button>
-            <button className="page-btn" disabled={meta.page >= meta.totalPages} onClick={() => setPage(meta.page + 1)}><ChevronRight size={13} /></button>
-          </div>
-        </div>
+        <Pagination meta={meta} setPage={setPage} />
       </div>
 
       {/* Detail Drawer */}

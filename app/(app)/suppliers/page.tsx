@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { usePaginated } from '@/hooks/useApi';
 import { formatDate } from '@/lib/utils';
-import { Plus, Search, Eye, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Eye, X } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 import { toast } from 'sonner';
 
 interface Supplier { id: number; supplier_code: string; name: string; phone: string; email: string; address: string; city: string; contact_person: string; bank_name: string; account_number: string; created_at: string; }
@@ -57,10 +58,7 @@ export default function SuppliersPage() {
             ))}
           </tbody>
         </table></div>
-        <div className="flex items-center justify-between px-4 py-3" style={{borderTop:'1px solid var(--color-border-soft)'}}>
-          <div className="text-[12px]" style={{color:'var(--color-text-muted)'}}>{meta.total > 0 ? `${((meta.page-1)*meta.limit)+1}–${Math.min(meta.page*meta.limit,meta.total)} dari ${meta.total}` : '0 data'}</div>
-          <div className="pagination"><button className="page-btn" disabled={meta.page<=1} onClick={()=>setPage(meta.page-1)}><ChevronLeft size={13}/></button><button className="page-btn" disabled={meta.page>=meta.totalPages} onClick={()=>setPage(meta.page+1)}><ChevronRight size={13}/></button></div>
-        </div>
+        <Pagination meta={meta} setPage={setPage} />
       </div>
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}>

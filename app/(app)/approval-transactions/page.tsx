@@ -3,10 +3,11 @@ import { useState, useEffect } from 'react';
 import { usePaginated } from '@/hooks/useApi';
 import { formatRupiah, formatDate, PO_STATUS } from '@/lib/utils';
 import {
-  CheckCircle2, XCircle, Eye, X, ChevronLeft, ChevronRight,
-  Search, ChevronDown, Clock, User, Building2, FolderKanban,
+  CheckCircle2, XCircle, Eye, X,
+  Search, Clock, User, Building2, FolderKanban,
   FileText, TrendingUp, TrendingDown, AlertCircle,
 } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 import { toast } from 'sonner';
 
 interface POItem {
@@ -156,17 +157,6 @@ export default function ApprovalTransactionsPage() {
     if (days > 3) return { color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: Clock };
     return { color: '#059669', bg: '#ecfdf5', border: '#a7f3d0', icon: CheckCircle2 };
   };
-
-  const pages: (number | string)[] = [];
-  if (meta.totalPages <= 7) {
-    for (let i = 1; i <= meta.totalPages; i++) pages.push(i);
-  } else {
-    pages.push(1);
-    if (meta.page > 3) pages.push('...');
-    for (let i = Math.max(2, meta.page - 1); i <= Math.min(meta.totalPages - 1, meta.page + 1); i++) pages.push(i);
-    if (meta.page < meta.totalPages - 2) pages.push('...');
-    pages.push(meta.totalPages);
-  }
 
   return (
     <div className="space-y-4 max-w-[1400px]">
@@ -324,41 +314,7 @@ export default function ApprovalTransactionsPage() {
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between px-4 py-3 flex-wrap gap-2" style={{ borderTop: '1px solid var(--color-border-soft)' }}>
-          <div className="flex items-center gap-3">
-            <span className="text-[12px]" style={{ color: 'var(--color-text-muted)' }}>
-              {meta.total > 0
-                ? `${(meta.page - 1) * meta.limit + 1}–${Math.min(meta.page * meta.limit, meta.total)} dari ${meta.total}`
-                : '0 data'}
-            </span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Tampil</span>
-              <div className="relative">
-                <select
-                  className="appearance-none pl-2 pr-6 py-1 rounded-md text-[12px] font-medium cursor-pointer"
-                  style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-text)' }}
-                  value={meta.limit}
-                  onChange={(e) => { setLimit(Number(e.target.value)); }}
-                >
-                  {[10, 20, 30, 40, 50].map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
-                <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--color-text-muted)' }} />
-              </div>
-              <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>per halaman</span>
-            </div>
-          </div>
-
-          <div className="pagination">
-            <button className="page-btn" disabled={meta.page <= 1} onClick={() => setPage(meta.page - 1)}><ChevronLeft size={13} /></button>
-            {pages.map((p, i) =>
-              p === '...'
-                ? <span key={`e${i}`} className="page-btn" style={{ cursor: 'default', color: 'var(--color-text-muted)' }}>…</span>
-                : <button key={p} className={`page-btn ${p === meta.page ? 'active' : ''}`} onClick={() => setPage(p as number)}>{p}</button>
-            )}
-            <button className="page-btn" disabled={meta.page >= meta.totalPages} onClick={() => setPage(meta.page + 1)}><ChevronRight size={13} /></button>
-          </div>
-        </div>
+        <Pagination meta={meta} setPage={setPage} setLimit={setLimit} />
       </div>
 
       {/* Detail Drawer */}

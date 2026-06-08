@@ -258,9 +258,27 @@ export default function BalanceSheetPage() {
 
       <style>{`
         @media print {
-          .no-print { display: none !important; }
-          body { background: white !important; }
-          .grid { display: block !important; }
+          #bs-content { max-width: 100% !important; }
+
+          /* Two-column grid → single column for print */
+          #bs-content .grid { display: block !important; }
+          #bs-content .grid > * { margin-bottom: 12px; }
+
+          #bs-content table {
+            font-size: 9px !important;
+            width: 100% !important;
+          }
+          #bs-content table thead { display: table-header-group !important; }
+          #bs-content table tr    { break-inside: avoid !important; }
+          #bs-content table th,
+          #bs-content table td    { padding: 4px 8px !important; font-size: 9px !important; }
+
+          /* Force color on summary rows */
+          #bs-content table tr:last-child,
+          #bs-content table .summary-row {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
         }
       `}</style>
     </div>

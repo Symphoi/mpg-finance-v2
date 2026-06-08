@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import { usePaginated } from '@/hooks/useApi';
 import { formatDate } from '@/lib/utils';
-import { Plus, Search, X, ChevronLeft, ChevronRight, Shield, Users, Key, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Search, X, Shield, Users, Key, ToggleLeft, ToggleRight } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 import { toast } from 'sonner';
 
 interface User { user_code: string; name: string; email: string; department: string; position: string; status: string; roles: string; role_codes: string; created_at: string; }
@@ -166,10 +167,7 @@ export default function RBACPage() {
                 ))}
               </tbody>
             </table></div>
-            <div className="flex items-center justify-between px-4 py-3" style={{borderTop:'1px solid var(--color-border-soft)'}}>
-              <div className="text-[12px]" style={{color:'var(--color-text-muted)'}}>{meta.total} user</div>
-              <div className="pagination"><button className="page-btn" disabled={meta.page<=1} onClick={()=>setPage(meta.page-1)}><ChevronLeft size={13}/></button><button className="page-btn" disabled={meta.page>=meta.totalPages} onClick={()=>setPage(meta.page+1)}><ChevronRight size={13}/></button></div>
-            </div>
+            <Pagination meta={meta} setPage={setPage} />
           </div>
         </>
       )}

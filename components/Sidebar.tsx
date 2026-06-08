@@ -50,6 +50,7 @@ const NAV: NavItem[] = [
       { label: 'Kas & Bank',          href: '/bank-accounts' },
       { label: 'Rekonsiliasi',        href: '/bank-reconciliations' },
       { label: 'Manual Journal',      href: '/manual-journals' },
+      { label: 'Log Jurnal',          href: '/journals' },
       { label: 'Intercompany',        href: '/intercompany' },
       { label: 'Chart of Account',    href: '/chart-of-account' },
       { label: 'Accounting Rules',    href: '/accounting-rules' },

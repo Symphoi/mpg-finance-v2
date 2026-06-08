@@ -478,44 +478,75 @@ export default function DashboardPage() {
           <div className="card" style={{ padding: '16px 20px', marginTop: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1E1B4B' }}>Eliminasi Intercompany</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1E1B4B' }}>
+                  {companyFilter ? 'Posisi Intercompany' : 'Eliminasi Intercompany'}
+                </div>
                 <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>
-                  Transaksi antar entitas yang dieliminasi dalam konsolidasi
+                  {companyFilter
+                    ? `Saldo akun interco milik ${selectedCompanyName}`
+                    : 'Eliminasi transaksi antar entitas dalam konsolidasi'}
                 </div>
               </div>
-              {elimBalanced
-                ? <span className="badge badge-green" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <CheckCircle2 size={11} /> Balanced
-                  </span>
-                : <span className="badge badge-red" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <AlertCircle size={11} /> Selisih!
-                  </span>
+              {companyFilter
+                ? <span className="badge badge-purple">Per Perusahaan</span>
+                : elimBalanced
+                  ? <span className="badge badge-green" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <CheckCircle2 size={11} /> Balanced
+                    </span>
+                  : <span className="badge badge-red" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <AlertCircle size={11} /> Selisih!
+                    </span>
               }
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 16 }}>
-              {[
-                { label: 'Eliminasi Debit',  val: elim?.total_debit ?? 0,  color: '#059669', bg: '#ECFDF5' },
-                { label: 'Eliminasi Kredit', val: elim?.total_credit ?? 0, color: '#DC2626', bg: '#FEF2F2' },
-                { label: 'Selisih (harus 0)',
-                  val: Math.abs((elim?.total_debit ?? 0) - (elim?.total_credit ?? 0)),
-                  color: elimBalanced ? '#059669' : '#DC2626',
-                  bg: elimBalanced ? '#ECFDF5' : '#FEF2F2',
-                },
-              ].map(({ label, val, color, bg }) => (
-                <div key={label} style={{ background: bg, borderRadius: 10, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 10.5, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
-                    {label}
+            <div style={{ display: 'grid', gridTemplateColumns: companyFilter ? '1fr 1fr' : '1fr 1fr 1fr', gap: 12, marginTop: 16 }}>
+              {companyFilter ? (
+                <>
+                  <div style={{ background: '#ECFDF5', borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 10.5, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                      Piutang Interco (1150)
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fira Code', monospace", color: '#059669' }}>
+                      {fmt(elim?.total_debit ?? 0)}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fira Code', monospace", color }}>
-                    {fmt(val)}
+                  <div style={{ background: '#FEF2F2', borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 10.5, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                      Hutang Interco (2150)
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fira Code', monospace", color: '#DC2626' }}>
+                      {fmt(elim?.total_credit ?? 0)}
+                    </div>
                   </div>
-                </div>
-              ))}
+                </>
+              ) : (
+                <>
+                  {[
+                    { label: 'Eliminasi Debit',   val: elim?.total_debit ?? 0,  color: '#059669', bg: '#ECFDF5' },
+                    { label: 'Eliminasi Kredit',  val: elim?.total_credit ?? 0, color: '#DC2626', bg: '#FEF2F2' },
+                    { label: 'Selisih (harus 0)',
+                      val: Math.abs((elim?.total_debit ?? 0) - (elim?.total_credit ?? 0)),
+                      color: elimBalanced ? '#059669' : '#DC2626',
+                      bg: elimBalanced ? '#ECFDF5' : '#FEF2F2',
+                    },
+                  ].map(({ label, val, color, bg }) => (
+                    <div key={label} style={{ background: bg, borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ fontSize: 10.5, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                        {label}
+                      </div>
+                      <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fira Code', monospace", color }}>
+                        {fmt(val)}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
 
             <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #EAE8FF', fontSize: 10.5, color: '#A5A3C8', lineHeight: 1.6 }}>
-              * Mencakup: Piutang Inter-Co (akun 1150) dan Hutang Inter-Co (akun 2150) antar entitas konsolidasi
+              {companyFilter
+                ? '* Saldo akun 1150 (Piutang Interco) dan 2150 (Hutang Interco) milik perusahaan ini. Eliminasi hanya berlaku pada laporan konsolidasi.'
+                : '* Mencakup: Piutang Inter-Co (akun 1150) dan Hutang Inter-Co (akun 2150) antar entitas konsolidasi'}
             </div>
           </div>
         </>

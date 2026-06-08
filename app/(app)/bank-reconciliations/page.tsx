@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import { usePaginated } from '@/hooks/useApi';
 import { formatRupiah, formatDate } from '@/lib/utils';
-import { Plus, Eye, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Eye, X } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 import { toast } from 'sonner';
 
 interface Recon { id: number; account_code: string; bank_name: string; account_number: string; period_start: string; period_end: string; bank_balance: number; book_balance: number; difference: number; status: string; notes: string; created_by: string; created_at: string; }
@@ -68,10 +69,7 @@ export default function BankReconciliationsPage() {
             ))}
           </tbody>
         </table></div>
-        <div className="flex items-center justify-between px-4 py-3" style={{borderTop:'1px solid var(--color-border-soft)'}}>
-          <div className="text-[12px]" style={{color:'var(--color-text-muted)'}}>{meta.total} data</div>
-          <div className="pagination"><button className="page-btn" disabled={meta.page<=1} onClick={()=>setPage(meta.page-1)}><ChevronLeft size={13}/></button><button className="page-btn" disabled={meta.page>=meta.totalPages} onClick={()=>setPage(meta.page+1)}><ChevronRight size={13}/></button></div>
-        </div>
+        <Pagination meta={meta} setPage={setPage} />
       </div>
 
       {showCreate && (

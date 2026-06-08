@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import { usePaginated, useDebounce } from '@/hooks/useApi';
 import { formatRupiah, formatDate, SO_STATUS } from '@/lib/utils';
-import { Plus, Search, Filter, Download, Eye, X, ChevronLeft, ChevronRight, Upload, Trash2, FileText, AlertCircle, Paperclip } from 'lucide-react';
+import { Plus, Search, Filter, Download, Eye, X, Upload, Trash2, FileText, AlertCircle, Paperclip } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 import StatusProgress, { SO_STEPS } from '@/components/Statusprogress';
 
 const STATUS_OPTIONS = [
@@ -411,20 +412,7 @@ export default function SalesOrderPage() {
             </tbody>
           </table>
         </div>
-        {/* Pagination Controls */}
-        <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: '1px solid var(--color-border-soft)' }}>
-          <div className="text-[12px]" style={{ color: 'var(--color-text-muted)' }}>
-            {meta.total > 0 ? `${((meta.page-1)*meta.limit)+1}–${Math.min(meta.page*meta.limit,meta.total)} dari ${meta.total}` : '0 data'}
-          </div>
-          <div className="pagination">
-            <button className="page-btn" disabled={meta.page <= 1} onClick={() => setPage(meta.page - 1)}><ChevronLeft size={13} /></button>
-            {Array.from({ length: Math.min(5, meta.totalPages) }, (_, i) => {
-              const p = Math.max(1, Math.min(meta.page - 2, meta.totalPages - 4)) + i;
-              return <button key={p} className={`page-btn ${p === meta.page ? 'active' : ''}`} onClick={() => setPage(p)}>{p}</button>;
-            })}
-            <button className="page-btn" disabled={meta.page >= meta.totalPages} onClick={() => setPage(meta.page + 1)}><ChevronRight size={13} /></button>
-          </div>
-        </div>
+        <Pagination meta={meta} setPage={setPage} />
       </div>
 
       {/* Detail Drawer */}

@@ -2,11 +2,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { formatRupiah, formatDate } from '@/lib/utils';
 import {
-  Search, Eye, X, ChevronLeft, ChevronRight, CreditCard,
+  Search, Eye, X, CreditCard,
   CheckCircle2, AlertCircle, Loader2, ChevronDown,
   FileText, Banknote, Info, Building2, Upload, Trash2,
   ArrowRightLeft, ShieldAlert
 } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -112,63 +113,6 @@ const INVOICE_STATUS: Record<string, { label: string; color: string }> = {
 
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
 const PAYMENT_METHODS = ['transfer', 'cash', 'other'];
-
-// ─── Dynamic Pagination ───────────────────────────────────────────────────────
-
-function Pagination({
-  page, totalPages, total, limit, onPage, onLimitChange,
-}: {
-  page: number; totalPages: number; total: number;
-  limit: number; onPage: (p: number) => void; onLimitChange: (l: number) => void;
-}) {
-  const from = total > 0 ? (page - 1) * limit + 1 : 0;
-  const to = Math.min(page * limit, total);
-
-  const pages: (number | '...')[] = [];
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i++) pages.push(i);
-  } else {
-    pages.push(1);
-    if (page > 3) pages.push('...');
-    for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
-    if (page < totalPages - 2) pages.push('...');
-    pages.push(totalPages);
-  }
-
-  return (
-    <div className="flex items-center justify-between px-4 py-3 flex-wrap gap-2" style={{ borderTop: '1px solid var(--color-border-soft)' }}>
-      <div className="flex items-center gap-3">
-        <span className="text-[12px]" style={{ color: 'var(--color-text-muted)' }}>
-          {total > 0 ? `${from}–${to} dari ${total}` : '0 data'}
-        </span>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Tampil</span>
-          <div className="relative">
-            <select
-              className="appearance-none pl-2 pr-6 py-1 rounded-md text-[12px] font-medium cursor-pointer"
-              style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-text)' }}
-              value={limit}
-              onChange={e => onLimitChange(Number(e.target.value))}
-            >
-              {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
-            <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--color-text-muted)' }} />
-          </div>
-          <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>per halaman</span>
-        </div>
-      </div>
-      <div className="pagination">
-        <button className="page-btn" disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft size={13} /></button>
-        {pages.map((p, i) =>
-          p === '...'
-            ? <span key={`e${i}`} className="page-btn" style={{ cursor: 'default', color: 'var(--color-text-muted)' }}>…</span>
-            : <button key={p} className={`page-btn ${p === page ? 'active' : ''}`} onClick={() => onPage(p as number)}>{p}</button>
-        )}
-        <button className="page-btn" disabled={page >= totalPages} onClick={() => onPage(page + 1)}><ChevronRight size={13} /></button>
-      </div>
-    </div>
-  );
-}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -642,14 +586,7 @@ export default function InvoicePaymentPage() {
             </tbody>
           </table>
         </div>
-        <Pagination
-          page={page}
-          totalPages={totalPages}
-          total={total}
-          limit={limit}
-          onPage={setPage}
-          onLimitChange={(l) => { setLimit(l); setPage(1); }}
-        />
+        <Pagination meta={{ page, limit, total, totalPages }} setPage={setPage} setLimit={(l) => { setLimit(l); setPage(1); }} />
       </div>
 
       {/* Detail Drawer */}

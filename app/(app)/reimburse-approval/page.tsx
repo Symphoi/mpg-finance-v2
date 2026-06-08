@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { usePaginated } from '@/hooks/useApi';
 import { formatRupiah, formatDate, REIMBURSE_STATUS } from '@/lib/utils';
-import { CheckCircle2, XCircle, Eye, X, ChevronLeft, ChevronRight, FileText, Plus } from 'lucide-react';
+import { CheckCircle2, XCircle, Eye, X, FileText, Plus } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 import { toast } from 'sonner';
 
 interface Reimburse {
@@ -141,15 +142,7 @@ export default function ReimburseApprovalPage() {
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: '1px solid var(--color-border-soft)' }}>
-          <div className="text-[12px]" style={{ color: 'var(--color-text-muted)' }}>
-            {meta.total > 0 ? `${((meta.page-1)*meta.limit)+1}–${Math.min(meta.page*meta.limit,meta.total)} dari ${meta.total}` : '0 data'}
-          </div>
-          <div className="pagination">
-            <button className="page-btn" disabled={meta.page <= 1} onClick={() => setPage(meta.page - 1)}><ChevronLeft size={13} /></button>
-            <button className="page-btn" disabled={meta.page >= meta.totalPages} onClick={() => setPage(meta.page + 1)}><ChevronRight size={13} /></button>
-          </div>
-        </div>
+        <Pagination meta={meta} setPage={setPage} />
       </div>
 
       {/* Reject Modal */}

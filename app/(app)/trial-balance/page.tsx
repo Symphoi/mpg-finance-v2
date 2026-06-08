@@ -224,8 +224,33 @@ export default function TrialBalancePage() {
 
       <style>{`
         @media print {
-          .no-print { display: none !important; }
-          body { background: white !important; }
+          #trial-balance-content { max-width: 100% !important; }
+
+          /* Table: force print sizes, override inline styles */
+          #trial-balance-content table {
+            font-size: 9px !important;
+            width: 100% !important;
+          }
+          #trial-balance-content table thead {
+            display: table-header-group !important;
+          }
+          #trial-balance-content table tr {
+            break-inside: avoid !important;
+          }
+          #trial-balance-content table th,
+          #trial-balance-content table td {
+            padding: 4px 8px !important;
+            font-size: 9px !important;
+          }
+          /* Grand total row: print dark bg */
+          #trial-balance-content table tr:last-child {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          /* Group subtotal rows */
+          #trial-balance-content .card {
+            break-inside: auto !important;
+          }
         }
       `}</style>
     </div>

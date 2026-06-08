@@ -174,3 +174,115 @@ body {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* ── Print / PDF ────────────────────────────────────────────────────────── */
+@media print {
+  /* Page setup */
+  @page {
+    size: A4 portrait;
+    margin: 14mm 12mm 14mm 12mm;
+  }
+
+  /* Hide non-content elements */
+  .no-print,
+  nav,
+  aside,
+  header,
+  .app-layout > aside,          /* sidebar */
+  .app-layout > .main-content > header { /* topbar */
+    display: none !important;
+  }
+
+  /* Reset layout: full width, no scroll clipping */
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+    font-size: 11px !important;
+  }
+
+  .app-layout {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .main-content {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  .page-body {
+    overflow: visible !important;
+    padding: 0 !important;
+    height: auto !important;
+  }
+
+  /* Cards: remove shadow, keep border */
+  .card {
+    border: 1px solid #ddd !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  /* Table print */
+  .tbl-wrapper { overflow: visible !important; }
+
+  .tbl {
+    width: 100% !important;
+    font-size: 10px !important;
+    border-collapse: collapse !important;
+  }
+
+  .tbl th {
+    background: #f5f5f5 !important;
+    color: #333 !important;
+    padding: 5px 8px !important;
+    font-size: 9px !important;
+    border: 1px solid #ddd !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .tbl td {
+    padding: 5px 8px !important;
+    border-bottom: 1px solid #eee !important;
+    font-size: 10px !important;
+  }
+
+  /* Repeat table header on every page */
+  thead { display: table-header-group !important; }
+  tfoot { display: table-footer-group !important; }
+
+  /* Don't break table rows mid-row */
+  tr { break-inside: avoid !important; }
+
+  /* Section/group headers — keep with next element */
+  h1, h2, h3, h4 { break-after: avoid !important; }
+
+  /* Section blocks */
+  .print-section {
+    break-inside: avoid;
+    margin-bottom: 8px;
+  }
+
+  /* Force page break before specific sections */
+  .print-page-break { break-before: page !important; }
+
+  /* Badges: print colors accurately */
+  .badge {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    border: 1px solid #ccc !important;
+  }
+
+  /* Buttons: hide */
+  .btn { display: none !important; }
+
+  /* Input/select: hide */
+  input, select { display: none !important; }
+
+  /* Print-only visible */
+  .print-only { display: block !important; }
+}
