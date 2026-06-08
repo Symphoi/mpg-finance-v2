@@ -4,9 +4,9 @@ import { withAuth } from '@/app/lib/auth';
 import { query } from '@/app/lib/db';
 import { ok, notFound, serverError } from '@/app/lib/response';
 
-export const GET = withAuth(async (_req: NextRequest, _user, { params }: { params: { code: string } }) => {
+export const GET = withAuth(async (req: NextRequest) => {
   try {
-    const { code } = params;
+    const code = req.url.split('/api/journals/')[1]?.split('/items')[0];
 
     const items = await query(
       `SELECT
