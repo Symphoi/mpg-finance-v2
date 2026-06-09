@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 import { withAuth } from '@/app/lib/auth';
 import { query } from '@/app/lib/db';
 import { ok, created, paginated, badRequest, serverError } from '@/app/lib/response';
+import { createCommodityJournal } from '@/lib/accounting';
+
+const COMMODITY_LABEL: Record<'gold' | 'wood', string> = { gold: 'Emas', wood: 'Kayu' };
 
 async function ensureTables() {
   await query(`
@@ -24,6 +27,8 @@ async function ensureTables() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
   await query(`ALTER TABLE commodity_investments CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+  try { await query(`ALTER TABLE commodity_investments ADD COLUMN bank_account_code VARCHAR(50) DEFAULT NULL`); } catch {}
+  try { await query(`ALTER TABLE commodity_investments ADD COLUMN journal_code VARCHAR(50) DEFAULT NULL`); } catch {}
   await query(`
     CREATE TABLE IF NOT EXISTS commodity_returns (
       id               INT AUTO_INCREMENT PRIMARY KEY,
@@ -110,7 +115,7 @@ export const GET = withAuth(async (req: NextRequest) => {
 export const POST = withAuth(async (req: NextRequest, user) => {
   try {
     await ensureTables();
-    const { commodity_type, project_code, invest_date, modal_amount, notes } = await req.json();
+    const { commodity_type, project_code, invest_date, modal_amount, bank_account_code, notes } = await req.json();
 
     if (!commodity_type || !invest_date || !modal_amount) {
       return badRequest('commodity_type, invest_date, modal_amount wajib');
@@ -126,11 +131,30 @@ export const POST = withAuth(async (req: NextRequest, user) => {
 
     await query(
       `INSERT INTO commodity_investments
-         (investment_code, commodity_type, project_code, invest_date, modal_amount, total_return, notes, status, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 0, ?, 'active', ?, NOW(), NOW())`,
-      [investment_code, commodity_type, project_code || null, invest_date, modal_amount, notes || null, user.user_code],
+         (investment_code, commodity_type, project_code, invest_date, modal_amount, total_return,
+          bank_account_code, notes, status, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 0, ?, ?, 'active', ?, NOW(), NOW())`,
+      [investment_code, commodity_type, project_code || null, invest_date, modal_amount,
+       bank_account_code || null, notes || null, user.user_code],
     );
 
-    return created({ investment_code });
+    // Journal entry — skip gracefully if rule not configured
+    let journal_code: string | null = null;
+    if (bank_account_code) {
+      const commodity = COMMODITY_LABEL[commodity_type as 'gold' | 'wood'];
+      journal_code = await createCommodityJournal({
+        transaction_type: 'invest_create',
+        investment_code,
+        transaction_date: invest_date,
+        amount: Number(modal_amount),
+        description: `Modal investasi ${commodity} ${investment_code}`,
+        bank_account_code,
+      }, user);
+      if (journal_code) {
+        await query(`UPDATE commodity_investments SET journal_code=? WHERE investment_code=?`, [journal_code, investment_code]);
+      }
+    }
+
+    return created({ investment_code, journal_code });
   } catch (err) { return serverError(err); }
 });

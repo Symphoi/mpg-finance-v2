@@ -746,3 +746,87 @@ export async function getGeneralLedger(
     ORDER BY je.transaction_date ASC, je.journal_code ASC
   `, params);
 }
+
+// ============================================================
+// COMMODITY INVESTMENT JOURNALS
+// ============================================================
+
+async function ensureCommodityTransactionTypes() {
+  const types = [
+    ['invest_create',  'Investasi Komoditas (Modal Keluar)'],
+    ['invest_return',  'Return Investasi Komoditas'],
+    ['invest_expense', 'Biaya Operasional Investasi'],
+  ];
+  for (const [type_code, type_name] of types) {
+    await query(
+      `INSERT IGNORE INTO transaction_types (type_code, type_name, is_active) VALUES (?, ?, 1)`,
+      [type_code, type_name],
+    );
+  }
+  // Invalidate cache so new types are picked up
+  transactionTypesCache = [];
+  cacheTimestamp = 0;
+}
+
+/**
+ * Creates a journal entry for a commodity investment transaction.
+ * - invest_create:  Debit rule.debit_account (investasi asset), Credit bank_account
+ * - invest_return:  Debit bank_account, Credit rule.credit_account (pendapatan)
+ * - invest_expense: Debit rule.debit_account (biaya), Credit bank_account
+ * Returns null if accounting rule is not configured (graceful skip).
+ */
+export async function createCommodityJournal(
+  data: {
+    transaction_type: 'invest_create' | 'invest_return' | 'invest_expense';
+    investment_code: string;
+    transaction_date: string;
+    amount: number;
+    description: string;
+    bank_account_code: string;
+    company_code?: string;
+  },
+  user: { user_code?: string; name?: string }
+): Promise<string | null> {
+  try {
+    await ensureCommodityTransactionTypes();
+
+    let rule: AccountingRule;
+    try {
+      rule = await getAccountingRule(data.transaction_type, data.company_code);
+    } catch {
+      console.warn(`⚠️ No accounting rule for ${data.transaction_type} — journal skipped`);
+      return null;
+    }
+
+    const journalCode = await generateCode('JNL');
+    const periodCode  = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+    const isInflow    = data.transaction_type === 'invest_return';
+    const debitAcct   = isInflow ? data.bank_account_code        : rule.debit_account_code;
+    const creditAcct  = isInflow ? (rule.credit_account_code ?? rule.debit_account_code) : data.bank_account_code;
+
+    await query(`
+      INSERT INTO journal_entries
+        (journal_code, transaction_date, description, reference_type, reference_code,
+         period_code, company_code, total_debit, total_credit, status, created_by)
+      VALUES (?, ?, ?, 'commodity_investment', ?, ?, ?, ?, ?, 'posted', ?)
+    `, [journalCode, data.transaction_date, data.description,
+        data.investment_code, periodCode, data.company_code || null,
+        data.amount, data.amount, user.name || 'System']);
+
+    await query(`
+      INSERT INTO journal_items (journal_item_code, journal_code, account_code, debit_amount, credit_amount, description)
+      VALUES (?, ?, ?, ?, 0, ?)
+    `, [`JNI-${Date.now()}-D`, journalCode, debitAcct, data.amount, data.description]);
+
+    await query(`
+      INSERT INTO journal_items (journal_item_code, journal_code, account_code, debit_amount, credit_amount, description)
+      VALUES (?, ?, ?, 0, ?, ?)
+    `, [`JNI-${Date.now()}-C`, journalCode, creditAcct, data.amount, data.description]);
+
+    return journalCode;
+  } catch (err) {
+    console.error('createCommodityJournal error:', err);
+    return null;
+  }
+}

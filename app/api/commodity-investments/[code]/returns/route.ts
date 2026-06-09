@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { withAuth } from '@/app/lib/auth';
 import { query } from '@/app/lib/db';
 import { ok, created, badRequest, notFound, serverError } from '@/app/lib/response';
+import { createCommodityJournal } from '@/lib/accounting';
 
 export const GET = withAuth(async (req: NextRequest) => {
   try {
@@ -21,22 +22,26 @@ export const POST = withAuth(async (req: NextRequest, user) => {
     const code = req.url.split('/commodity-investments/')[1]?.split('/returns')[0] ?? '';
     if (!code) return notFound('Kode investasi tidak ditemukan');
 
-    const { return_date, amount, notes } = await req.json();
+    const { return_date, amount, bank_account_code, notes } = await req.json();
     if (!return_date || !amount) return badRequest('return_date dan amount wajib');
 
     const [inv] = await query(
       `SELECT * FROM commodity_investments WHERE investment_code = ?`, [code],
     ) as any[];
-    if (!inv)                      return notFound('Investasi tidak ditemukan');
+    if (!inv)                       return notFound('Investasi tidak ditemukan');
     if (inv.status === 'cancelled') return badRequest('Investasi sudah dibatalkan');
+
+    // Ensure bank_account_code column exists
+    try { await query(`ALTER TABLE commodity_returns ADD COLUMN bank_account_code VARCHAR(50) DEFAULT NULL`); } catch {}
+    try { await query(`ALTER TABLE commodity_returns ADD COLUMN journal_code VARCHAR(50) DEFAULT NULL`); } catch {}
 
     const rand        = Math.random().toString(36).slice(2, 8).toUpperCase();
     const return_code = `RET-${new Date().getFullYear()}-${rand}`;
 
     await query(
-      `INSERT INTO commodity_returns (return_code, investment_code, return_date, amount, notes, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [return_code, code, return_date, amount, notes || null, user.user_code],
+      `INSERT INTO commodity_returns (return_code, investment_code, return_date, amount, bank_account_code, notes, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [return_code, code, return_date, amount, bank_account_code || null, notes || null, user.user_code],
     );
 
     const newTotal = Number(inv.total_return) + Number(amount);
@@ -45,6 +50,23 @@ export const POST = withAuth(async (req: NextRequest, user) => {
       [newTotal, code],
     );
 
-    return created({ return_code, total_return: newTotal });
+    // Journal entry
+    let journal_code: string | null = null;
+    const bankCode = bank_account_code || inv.bank_account_code;
+    if (bankCode) {
+      journal_code = await createCommodityJournal({
+        transaction_type: 'invest_return',
+        investment_code:  code,
+        transaction_date: return_date,
+        amount:           Number(amount),
+        description:      `Return investasi ${code} — ${return_code}`,
+        bank_account_code: bankCode,
+      }, user);
+      if (journal_code) {
+        await query(`UPDATE commodity_returns SET journal_code=? WHERE return_code=?`, [journal_code, return_code]);
+      }
+    }
+
+    return created({ return_code, total_return: newTotal, journal_code });
   } catch (err) { return serverError(err); }
 });

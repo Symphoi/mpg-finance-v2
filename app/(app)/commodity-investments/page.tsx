@@ -38,7 +38,8 @@ interface Expense {
   notes: string | null;
 }
 
-interface Project { project_code: string; name: string; }
+interface Project    { project_code: string; name: string; }
+interface BankAccount { account_code: string; bank_name: string; account_number: string; }
 
 interface Summary {
   total_modal: number;
@@ -61,14 +62,14 @@ const STATUS: Record<string, { label: string; cls: string }> = {
 };
 
 /* ─── Detail Drawer ─────────────────────────────────────────────────────────── */
-function DetailDrawer({ inv, onClose, onUpdated }: { inv: Investment; onClose: () => void; onUpdated: () => void }) {
+function DetailDrawer({ inv, onClose, onUpdated, banks }: { inv: Investment; onClose: () => void; onUpdated: () => void; banks: BankAccount[] }) {
   const [returns, setReturns]         = useState<ReturnEntry[]>([]);
   const [expenses, setExpenses]       = useState<Expense[]>([]);
   const [loading, setLoading]         = useState(true);
   const [tab, setTab]                 = useState<'returns' | 'expenses'>('returns');
   const [showForm, setShowForm]       = useState(false);
-  const [returnForm, setReturnForm]   = useState({ return_date: '', amount: '', notes: '' });
-  const [expenseForm, setExpenseForm] = useState({ expense_date: '', description: '', amount: '', notes: '' });
+  const [returnForm, setReturnForm]   = useState({ return_date: '', amount: '', bank_account_code: '', notes: '' });
+  const [expenseForm, setExpenseForm] = useState({ expense_date: '', description: '', amount: '', bank_account_code: '', notes: '' });
   const [saving, setSaving]           = useState(false);
   const [updatingStatus, setUpdating] = useState(false);
   const [localInv, setLocalInv]       = useState(inv);
@@ -105,7 +106,7 @@ function DetailDrawer({ inv, onClose, onUpdated }: { inv: Investment; onClose: (
       if (!j.success) throw new Error(j.error);
       toast.success('Return dicatat');
       setLocalInv(prev => ({ ...prev, total_return: j.data.total_return }));
-      setReturnForm({ return_date: '', amount: '', notes: '' });
+      setReturnForm({ return_date: '', amount: '', bank_account_code: '', notes: '' });
       setShowForm(false);
       fetchAll(); onUpdated();
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Gagal'); }
@@ -126,7 +127,7 @@ function DetailDrawer({ inv, onClose, onUpdated }: { inv: Investment; onClose: (
       const j = await res.json();
       if (!j.success) throw new Error(j.error);
       toast.success('Biaya dicatat');
-      setExpenseForm({ expense_date: '', description: '', amount: '', notes: '' });
+      setExpenseForm({ expense_date: '', description: '', amount: '', bank_account_code: '', notes: '' });
       setShowForm(false);
       fetchAll(); onUpdated();
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Gagal'); }
@@ -263,6 +264,13 @@ function DetailDrawer({ inv, onClose, onUpdated }: { inv: Investment; onClose: (
                     </div>
                   </div>
                   <div className="mb-3">
+                    <label className="input-label">Rekening Bank (untuk jurnal)</label>
+                    <select className="input" value={returnForm.bank_account_code} onChange={e => setReturnForm(f => ({ ...f, bank_account_code: e.target.value }))}>
+                      <option value="">Pilih rekening (opsional)</option>
+                      {banks.map(b => <option key={b.account_code} value={b.account_code}>{b.bank_name} — {b.account_number}</option>)}
+                    </select>
+                  </div>
+                  <div className="mb-3">
                     <label className="input-label">Catatan</label>
                     <input type="text" className="input" placeholder="Opsional" value={returnForm.notes} onChange={e => setReturnForm(f => ({ ...f, notes: e.target.value }))} />
                   </div>
@@ -288,6 +296,13 @@ function DetailDrawer({ inv, onClose, onUpdated }: { inv: Investment; onClose: (
                   <div className="mb-3">
                     <label className="input-label">Deskripsi *</label>
                     <input type="text" className="input" placeholder="Contoh: Biaya angkut, gaji staff, dll" value={expenseForm.description} onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))} />
+                  </div>
+                  <div className="mb-3">
+                    <label className="input-label">Rekening Bank (untuk jurnal)</label>
+                    <select className="input" value={expenseForm.bank_account_code} onChange={e => setExpenseForm(f => ({ ...f, bank_account_code: e.target.value }))}>
+                      <option value="">Pilih rekening (opsional)</option>
+                      {banks.map(b => <option key={b.account_code} value={b.account_code}>{b.bank_name} — {b.account_number}</option>)}
+                    </select>
                   </div>
                   <div className="mb-3">
                     <label className="input-label">Catatan</label>
@@ -373,7 +388,8 @@ export default function CommodityInvestmentsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [form, setForm]             = useState({ commodity_type: 'gold', project_code: '', invest_date: '', modal_amount: '', notes: '' });
+  const [banks, setBanks]           = useState<BankAccount[]>([]);
+  const [form, setForm]             = useState({ commodity_type: 'gold', project_code: '', invest_date: '', modal_amount: '', bank_account_code: '', notes: '' });
   const [saving, setSaving]         = useState(false);
 
   const fetchSummary = () => {
@@ -385,6 +401,8 @@ export default function CommodityInvestmentsPage() {
     fetchSummary();
     fetch('/api/projects?limit=200', { credentials: 'include' })
       .then(r => r.json()).then(j => { if (j.success) setProjects(j.data ?? []); });
+    fetch('/api/bank-accounts?limit=100', { credentials: 'include' })
+      .then(r => r.json()).then(j => { if (j.success) setBanks(j.data ?? []); });
   }, []);
 
   const applyTypeFilter = (type: string) => { setTypeFilter(type); setParam('type', type); };
@@ -403,7 +421,7 @@ export default function CommodityInvestmentsPage() {
       if (!j.success) throw new Error(j.error);
       toast.success('Investasi ditambahkan');
       setShowCreate(false);
-      setForm({ commodity_type: 'gold', project_code: '', invest_date: '', modal_amount: '', notes: '' });
+      setForm({ commodity_type: 'gold', project_code: '', invest_date: '', modal_amount: '', bank_account_code: '', notes: '' });
       refetch(); fetchSummary();
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Gagal'); }
     setSaving(false);
@@ -572,6 +590,13 @@ export default function CommodityInvestmentsPage() {
                 <input type="number" className="input" min="0" placeholder="0" value={form.modal_amount} onChange={e => setForm(f => ({ ...f, modal_amount: e.target.value }))} />
               </div>
               <div>
+                <label className="input-label">Rekening Bank (untuk jurnal)</label>
+                <select className="input" value={form.bank_account_code} onChange={e => setForm(f => ({ ...f, bank_account_code: e.target.value }))}>
+                  <option value="">Pilih rekening (opsional)</option>
+                  {banks.map(b => <option key={b.account_code} value={b.account_code}>{b.bank_name} — {b.account_number}</option>)}
+                </select>
+              </div>
+              <div>
                 <label className="input-label">Catatan</label>
                 <textarea className="input resize-none" rows={2} placeholder="Opsional" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
               </div>
@@ -586,7 +611,7 @@ export default function CommodityInvestmentsPage() {
 
       {/* ── Detail Drawer ─────────────────────────────────────────────────── */}
       {drawerInv && (
-        <DetailDrawer inv={drawerInv} onClose={() => setDrawerInv(null)} onUpdated={() => { refetch(); fetchSummary(); }} />
+        <DetailDrawer inv={drawerInv} onClose={() => setDrawerInv(null)} onUpdated={() => { refetch(); fetchSummary(); }} banks={banks} />
       )}
     </div>
   );
