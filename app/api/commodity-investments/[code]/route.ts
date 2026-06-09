@@ -9,7 +9,8 @@ export const GET = withAuth(async (req: NextRequest) => {
     if (!code) return notFound('Kode investasi tidak ditemukan');
 
     const [inv] = await query(`
-      SELECT ci.*, p.name AS project_name
+      SELECT ci.*, p.name AS project_name,
+        COALESCE((SELECT SUM(ce.amount) FROM commodity_expenses ce WHERE ce.investment_code = ci.investment_code), 0) AS total_expenses
       FROM commodity_investments ci
       LEFT JOIN projects p ON ci.project_code = p.project_code
       WHERE ci.investment_code = ?
@@ -17,12 +18,12 @@ export const GET = withAuth(async (req: NextRequest) => {
 
     if (!inv) return notFound('Investasi tidak ditemukan');
 
-    const returns = await query(
-      `SELECT * FROM commodity_returns WHERE investment_code = ? ORDER BY return_date DESC`,
-      [code],
-    );
+    const [returns, expenses] = await Promise.all([
+      query(`SELECT * FROM commodity_returns  WHERE investment_code = ? ORDER BY return_date  DESC`, [code]),
+      query(`SELECT * FROM commodity_expenses WHERE investment_code = ? ORDER BY expense_date DESC`, [code]),
+    ]);
 
-    return ok({ ...inv, returns });
+    return ok({ ...inv, returns, expenses });
   } catch (err) { return serverError(err); }
 });
 

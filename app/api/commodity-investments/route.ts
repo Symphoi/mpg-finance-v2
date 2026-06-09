@@ -38,6 +38,20 @@ async function ensureTables() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
   await query(`ALTER TABLE commodity_returns CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+  await query(`
+    CREATE TABLE IF NOT EXISTS commodity_expenses (
+      id               INT AUTO_INCREMENT PRIMARY KEY,
+      expense_code     VARCHAR(50)   NOT NULL UNIQUE,
+      investment_code  VARCHAR(50)   NOT NULL,
+      expense_date     DATE          NOT NULL,
+      description      VARCHAR(255)  NOT NULL,
+      amount           DECIMAL(15,2) NOT NULL,
+      notes            TEXT          DEFAULT NULL,
+      created_by       VARCHAR(50),
+      created_at       DATETIME      DEFAULT NOW(),
+      INDEX idx_inv    (investment_code)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 }
 
 export const GET = withAuth(async (req: NextRequest) => {
@@ -50,12 +64,14 @@ export const GET = withAuth(async (req: NextRequest) => {
     if (action === 'summary') {
       const [row] = await query(`
         SELECT
-          COALESCE(SUM(modal_amount), 0)            AS total_modal,
-          COALESCE(SUM(total_return), 0)            AS total_return,
-          COALESCE(SUM(total_return - modal_amount), 0) AS profit_loss,
-          COUNT(*)                                  AS total_count,
-          SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) AS active_count
-        FROM commodity_investments
+          COALESCE(SUM(ci.modal_amount), 0) AS total_modal,
+          COALESCE(SUM(ci.total_return), 0) AS total_return,
+          COALESCE((SELECT SUM(amount) FROM commodity_expenses), 0) AS total_expenses,
+          COALESCE(SUM(ci.total_return) - SUM(ci.modal_amount), 0)
+            - COALESCE((SELECT SUM(amount) FROM commodity_expenses), 0) AS profit_loss,
+          COUNT(*) AS total_count,
+          SUM(CASE WHEN ci.status='active' THEN 1 ELSE 0 END) AS active_count
+        FROM commodity_investments ci
       `) as any[];
       return ok(row);
     }
@@ -75,7 +91,9 @@ export const GET = withAuth(async (req: NextRequest) => {
 
     const [rows, count] = await Promise.all([
       query(`
-        SELECT ci.*, p.name AS project_name
+        SELECT ci.*,
+          p.name AS project_name,
+          COALESCE((SELECT SUM(ce.amount) FROM commodity_expenses ce WHERE ce.investment_code = ci.investment_code), 0) AS total_expenses
         FROM commodity_investments ci
         LEFT JOIN projects p ON ci.project_code = p.project_code
         ${where}
