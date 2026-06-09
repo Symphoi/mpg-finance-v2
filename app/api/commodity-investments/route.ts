@@ -21,8 +21,9 @@ async function ensureTables() {
       INDEX idx_type   (commodity_type),
       INDEX idx_status (status),
       INDEX idx_project(project_code)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+  await query(`ALTER TABLE commodity_investments CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
   await query(`
     CREATE TABLE IF NOT EXISTS commodity_returns (
       id               INT AUTO_INCREMENT PRIMARY KEY,
@@ -34,8 +35,9 @@ async function ensureTables() {
       created_by       VARCHAR(50),
       created_at       DATETIME     DEFAULT NOW(),
       INDEX idx_inv    (investment_code)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+  await query(`ALTER TABLE commodity_returns CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
 }
 
 export const GET = withAuth(async (req: NextRequest) => {
