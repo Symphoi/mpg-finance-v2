@@ -9,7 +9,7 @@ export const GET = withAuth(async (req: NextRequest) => {
     if (!code) return notFound('Kode investasi tidak ditemukan');
 
     const [inv] = await query(`
-      SELECT ci.*, p.project_name
+      SELECT ci.*, p.name AS project_name
       FROM commodity_investments ci
       LEFT JOIN projects p ON ci.project_code = p.project_code
       WHERE ci.investment_code = ?

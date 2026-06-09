@@ -30,7 +30,7 @@ interface Return {
   created_at: string;
 }
 
-interface Project { project_code: string; project_name: string; }
+interface Project { project_code: string; name: string; }
 
 interface Summary {
   total_modal: number;
@@ -531,7 +531,7 @@ export default function CommodityInvestmentsPage() {
                 <label className="input-label">Project</label>
                 <select className="input" value={form.project_code} onChange={e => setForm(f => ({ ...f, project_code: e.target.value }))}>
                   <option value="">Tanpa project</option>
-                  {projects.map(p => <option key={p.project_code} value={p.project_code}>{p.project_name}</option>)}
+                  {projects.map(p => <option key={p.project_code} value={p.project_code}>{p.name}</option>)}
                 </select>
               </div>
 
