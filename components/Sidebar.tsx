@@ -1,12 +1,12 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   LayoutDashboard, FileText, ShoppingCart, CheckSquare, Truck, FileCheck,
   Wallet, Receipt, Calculator, Building, Users, Package, Shield, Percent,
   ListOrdered, Tag, ChevronDown, Settings, LogOut, Bell, Search,
-  BookOpen, GitBranch, Landmark, Scale
+  BookOpen, GitBranch, Landmark, Scale, AlertCircle, X, TrendingUp
 } from 'lucide-react';
 
 interface NavItem {
@@ -26,6 +26,12 @@ const NAV: NavItem[] = [
       { label: 'PO Approval',          href: '/approval-transactions' },
       { label: 'Delivery Order',       href: '/deliver-to-client' },
       { label: 'Invoice & Payment',    href: '/invoice-payment' },
+    ],
+  },
+  {
+    label: 'Investasi', icon: TrendingUp,
+    children: [
+      { label: 'Komoditas', href: '/commodity-investments' },
     ],
   },
   {
