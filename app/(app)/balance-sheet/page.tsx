@@ -1,6 +1,6 @@
 'use client';
 import { useState, useCallback, useEffect } from 'react';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, exportExcel } from '@/lib/utils';
 import { RefreshCw, Loader2, Printer, Download, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface BSRow {
@@ -25,30 +25,25 @@ interface BSData {
 
 const fmt = (n: number) => formatRupiah(Math.abs(n));
 
-function exportCSV(data: BSData, period: string) {
+async function doExportExcel(data: BSData, period: string) {
   const isProfit = data.net_income >= 0;
-  const rows: string[][] = [
+  const rows: (string | number)[][] = [
     ['Neraca (Balance Sheet)', '', `Periode: ${period}`],
-    [''],
+    [],
     ['Kategori', 'Kode Akun', 'Nama Akun', 'Jumlah'],
-    ...data.assets.map(r => ['Aset', r.account_code, r.account_name, String(r.balance)]),
-    ['', '', 'Total Aset', String(data.total_assets)],
-    [''],
-    ...data.liabilities.map(r => ['Liabilitas', r.account_code, r.account_name, String(r.balance)]),
-    ['', '', 'Total Liabilitas', String(data.total_liabilities)],
-    [''],
-    ...data.equity.map(r => ['Ekuitas', r.account_code, r.account_name, String(r.balance)]),
-    ['', '', isProfit ? 'Laba Berjalan' : 'Rugi Berjalan', String(data.net_income)],
-    ['', '', 'Total Ekuitas', String(data.total_equity + data.net_income)],
-    [''],
-    ['', '', 'TOTAL LIABILITAS + EKUITAS', String(data.total_liabilities + data.total_equity + data.net_income)],
+    ...data.assets.map(r => ['Aset', r.account_code, r.account_name, r.balance]),
+    ['', '', 'Total Aset', data.total_assets],
+    [],
+    ...data.liabilities.map(r => ['Liabilitas', r.account_code, r.account_name, r.balance]),
+    ['', '', 'Total Liabilitas', data.total_liabilities],
+    [],
+    ...data.equity.map(r => ['Ekuitas', r.account_code, r.account_name, r.balance]),
+    ['', '', isProfit ? 'Laba Berjalan' : 'Rugi Berjalan', data.net_income],
+    ['', '', 'Total Ekuitas', data.total_equity + data.net_income],
+    [],
+    ['', '', 'TOTAL LIABILITAS + EKUITAS', data.total_liabilities + data.total_equity + data.net_income],
   ];
-  const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `balance-sheet-${period}.csv`; a.click();
-  URL.revokeObjectURL(url);
+  await exportExcel(rows, `balance-sheet-${period}`, 'Neraca');
 }
 
 export default function BalanceSheetPage() {
@@ -115,8 +110,8 @@ export default function BalanceSheetPage() {
         </div>
         <div className="flex gap-2 no-print">
           {data && (
-            <button className="btn btn-outline btn-sm" onClick={() => exportCSV(data, from && to ? `${from}_${to}` : period)}>
-              <Download size={12} /> Export CSV
+            <button className="btn btn-outline btn-sm" onClick={() => doExportExcel(data, from && to ? `${from}_${to}` : period)}>
+              <Download size={12} /> Export Excel
             </button>
           )}
           <button className="btn btn-outline btn-sm" onClick={() => window.print()}>

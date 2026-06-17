@@ -281,9 +281,31 @@ export default function PurchaseOrderPage() {
   const debouncedPOSearch = useDebounce(poSearch, 400);
   useEffect(() => { setPOSearch(debouncedPOSearch); }, [debouncedPOSearch]);
 
-  const [salesOrders, setSalesOrders] = useState<SO[]>([]);
+  // SO tab — server-side paginated
+  const {
+    data: salesOrders,
+    meta: soMeta,
+    loading: soLoading,
+    refetch: refetchSO,
+    setSearch: setSOSearchParam,
+    setPage: setSOPage,
+    setLimit: setSOLimit,
+    setParam: setSOParam,
+  } = usePaginated<SO>('/api/sales-orders', { limit: '20' });
   const [soSearch, setSOSearch] = useState('');
-  const [soLoading, setSOLoading] = useState(false);
+  const debouncedSOSearch = useDebounce(soSearch, 400);
+  useEffect(() => { setSOSearchParam(debouncedSOSearch); }, [debouncedSOSearch]);
+
+  // All active SO (no pagination) — used for create PO dropdown only
+  const [allActiveSO, setAllActiveSO] = useState<SO[]>([]);
+
+  const fetchAllActiveSO = async () => {
+    try {
+      const res = await fetch('/api/sales-orders?limit=500&status=submitted,processing,invoicing');
+      const d = await res.json();
+      if (d.success) setAllActiveSO(d.data || []);
+    } catch { /* silent */ }
+  };
 
   const [allPayments, setAllPayments] = useState<POPayment[]>([]);
   const [paymentSearch, setPaymentSearch] = useState('');
@@ -343,7 +365,7 @@ export default function PurchaseOrderPage() {
 
   // ── Initial fetches ────────────────────────────────────────────────────────
 
-  useEffect(() => { fetchSalesOrders(); fetchSuppliersAndBanks(); }, []);
+  useEffect(() => { fetchSuppliersAndBanks(); fetchAllActiveSO(); }, []);
 
   useEffect(() => {
     const pays = poData.flatMap(po => po.payments || []);
@@ -351,17 +373,9 @@ export default function PurchaseOrderPage() {
     setStats(prev => ({ ...prev, totalPO: meta.total || 0, totalPayments: pays.length }));
   }, [poData, meta.total]);
 
-  const fetchSalesOrders = async () => {
-    setSOLoading(true);
-    try {
-      const res = await fetch('/api/sales-orders?limit=200');
-      const d = await res.json();
-      if (d.success) {
-        setSalesOrders(d.data || []);
-        setStats(prev => ({ ...prev, totalSO: (d.data || []).length }));
-      }
-    } catch { /* silent */ } finally { setSOLoading(false); }
-  };
+  useEffect(() => {
+    setStats(prev => ({ ...prev, totalSO: soMeta.total || 0 }));
+  }, [soMeta.total]);
 
   const fetchSuppliersAndBanks = async () => {
     try {
@@ -416,7 +430,7 @@ export default function PurchaseOrderPage() {
 
   const handleSelectSO = async (soCode: string) => {
     if (!soCode) { setSelectedSO(null); setSelectedSOItems([]); setExistingPOs([]); setPoForms([]); return; }
-    const so = salesOrders.find(s => s.so_code === soCode) || null;
+    const so = allActiveSO.find(s => s.so_code === soCode) || salesOrders.find(s => s.so_code === soCode) || null;
     setSelectedSO(so);
     setPoForms([]);
     if (so) {
@@ -593,7 +607,8 @@ export default function PurchaseOrderPage() {
       toast.success('Purchase Order berhasil dibuat!');
       closeCreate();
       refetch();
-      fetchSalesOrders();
+      refetchSO();
+      fetchAllActiveSO();
     } catch (err: any) {
       toast.error('Error: ' + err.message);
     } finally { setCreating(false); }
@@ -666,7 +681,7 @@ export default function PurchaseOrderPage() {
       setShowPayment(false);
       setPaymentPO(null);
       refetch();
-      fetchSalesOrders();
+      refetchSO();
     } catch (err: any) {
       toast.error('Error: ' + err.message);
     } finally { setPaying(false); }
@@ -677,15 +692,7 @@ export default function PurchaseOrderPage() {
   const hasActiveSOFilter = !!(soSearch || soStatusFilter || soDateFrom || soDateTo);
   const hasActivePOFilter = !!(poSearch || poStatusFilter || poDateFrom || poDateTo);
 
-  const filteredSO = salesOrders.filter(so => {
-    const s = soSearch.toLowerCase();
-    if (s && !so.so_code.toLowerCase().includes(s) && !(so.customer_name || '').toLowerCase().includes(s)) return false;
-    if (soStatusFilter && so.status !== soStatusFilter) return false;
-    if (soDateFrom && so.created_at && so.created_at < soDateFrom) return false;
-    if (soDateTo && so.created_at && so.created_at > soDateTo + 'T23:59:59') return false;
-    return true;
-  });
-
+  // SO filtering is server-side via usePaginated params
   const filteredPO = poData.filter(po => {
     if (poStatusFilter && po.status !== poStatusFilter) return false;
     if (poDateFrom && po.created_at < poDateFrom) return false;
@@ -705,6 +712,11 @@ export default function PurchaseOrderPage() {
       onClick={() => setActiveTab(tab)}
     >{label}</button>
   );
+
+  // Sync SO status/date filters to server-side params
+  useEffect(() => { setSOParam('status', soStatusFilter); }, [soStatusFilter]);
+  useEffect(() => { setSOParam('from',   soDateFrom); },   [soDateFrom]);
+  useEffect(() => { setSOParam('to',     soDateTo); },     [soDateTo]);
 
   const resetAllFilters = () => {
     setPOSearchLocal(''); setPOSearch(''); setSOSearch(''); setPaymentSearch('');
@@ -801,10 +813,10 @@ export default function PurchaseOrderPage() {
             <thead><tr><th>Kode SO</th><th>Customer</th><th>Tgl Dibuat</th><th>Item</th><th className="text-right">Total</th><th>Status</th><th>PO Count</th><th></th></tr></thead>
             <tbody>
               {soLoading && <tr><td colSpan={8} className="text-center py-8"><Loader2 size={16} className="inline animate-spin mr-2" />Memuat...</td></tr>}
-              {!soLoading && filteredSO.length === 0 && (
+              {!soLoading && salesOrders.length === 0 && (
                 <tr><td colSpan={8} className="py-12"><div className="flex flex-col items-center gap-2"><ShoppingCart size={28} style={{ color: 'var(--color-border)' }} /><div className="text-[13px] font-medium" style={{ color: 'var(--color-text-muted)' }}>{hasActiveSOFilter ? 'Tidak ada SO yang cocok' : 'Tidak ada data'}</div>{hasActiveSOFilter && <button className="btn btn-outline btn-sm mt-1" onClick={resetAllFilters}>Reset Filter</button>}</div></td></tr>
               )}
-              {filteredSO.map(so => {
+              {salesOrders.map(so => {
                 const st = SO_STATUS[so.status] ?? { label: so.status, color: 'gray' };
                 const canCreate = canCreatePOForSO(so);
                 return (
@@ -828,6 +840,7 @@ export default function PurchaseOrderPage() {
               })}
             </tbody>
           </table></div>
+          <Pagination meta={soMeta} setPage={setSOPage} setLimit={(l) => { setSOLimit(l); setSOPage(1); }} />
         </div>
       )}
 
@@ -957,7 +970,7 @@ export default function PurchaseOrderPage() {
                     <label className="input-label">Sales Order *</label>
                     <select className="input" value={selectedSO?.so_code || ''} onChange={e => handleSelectSO(e.target.value)}>
                       <option value="">Pilih SO</option>
-                      {salesOrders.filter(so => so.status !== 'cancelled' && so.status !== 'completed').map(so => (
+                      {allActiveSO.filter(so => so.status !== 'cancelled' && so.status !== 'completed').map(so => (
                         <option key={so.so_code} value={so.so_code}>{so.so_code} – {so.customer_name || so.customer_code}</option>
                       ))}
                     </select>

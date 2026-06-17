@@ -1,24 +1,19 @@
 'use client';
 import { useState, useCallback, useEffect } from 'react';
-import { formatRupiah, formatDate } from '@/lib/utils';
+import { formatRupiah, formatDate, exportExcel } from '@/lib/utils';
 import { RefreshCw, Loader2, Printer, Download } from 'lucide-react';
 
-function exportCSV(data: GLData, period: string) {
+async function doExportExcel(data: GLData, period: string) {
   if (!data.account) return;
-  const rows: string[][] = [
+  const rows: (string | number)[][] = [
     ['General Ledger', '', `Akun: ${data.account.account_code} — ${data.account.account_name}`, `Periode: ${period}`],
-    [''],
+    [],
     ['Tgl', 'Journal', 'Referensi', 'Kode Ref', 'Keterangan', 'Debit', 'Kredit', 'Saldo'],
-    ...data.rows.map(r => [r.transaction_date, r.journal_code, r.reference_type, r.reference_code, r.description, String(r.debit_amount), String(r.credit_amount), String(r.running_balance)]),
-    [''],
-    ['', '', '', '', 'TOTAL', String(data.total_debit), String(data.total_credit), String(data.ending_balance)],
+    ...data.rows.map(r => [r.transaction_date, r.journal_code, r.reference_type, r.reference_code, r.description, r.debit_amount, r.credit_amount, r.running_balance]),
+    [],
+    ['', '', '', '', 'TOTAL', data.total_debit, data.total_credit, data.ending_balance],
   ];
-  const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `gl-${data.account.account_code}-${period}.csv`; a.click();
-  URL.revokeObjectURL(url);
+  await exportExcel(rows, `gl-${data.account.account_code}-${period}`, 'General Ledger');
 }
 
 interface GLRow {
@@ -93,8 +88,8 @@ export default function GeneralLedgerPage() {
         </div>
         <div className="flex gap-2 no-print">
           {data?.account && data.rows.length > 0 && (
-            <button className="btn btn-outline btn-sm" onClick={() => exportCSV(data, from && to ? `${from}_${to}` : period)}>
-              <Download size={12} /> Export CSV
+            <button className="btn btn-outline btn-sm" onClick={() => doExportExcel(data, from && to ? `${from}_${to}` : period)}>
+              <Download size={12} /> Export Excel
             </button>
           )}
           <button className="btn btn-outline btn-sm" onClick={() => window.print()}>

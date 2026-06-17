@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { formatRupiah, formatDate } from '@/lib/utils';
+import { formatRupiah, formatDate, exportExcel } from '@/lib/utils';
 import {
   Building2, ArrowRightLeft, TrendingUp, TrendingDown, Minus,
   RefreshCw, Download, AlertTriangle, CheckCircle2, ChevronDown
@@ -47,9 +47,9 @@ export default function IntercompanyPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  function exportCSV() {
+  async function doExportExcel() {
     if (!data?.companies?.length) return;
-    const rows = [
+    const rows: (string | number)[][] = [
       ['Perusahaan', 'Piutang Interco', 'Hutang Interco', 'Net Posisi'],
       ...data.companies.map((c: CompanySummary) => [
         c.company_name,
@@ -58,12 +58,8 @@ export default function IntercompanyPage() {
         c.net_position,
       ]),
     ];
-    const csv = rows.map(r => r.map((v: string|number) => `"${v}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), { href: url, download: 'intercompany.csv' });
-    a.click();
-    URL.revokeObjectURL(url);
+    const period = from && to ? `${from}_${to}` : 'all';
+    await exportExcel(rows, `intercompany-${period}`, 'Intercompany');
   }
 
   const summary = data?.summary;
@@ -85,8 +81,8 @@ export default function IntercompanyPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button className="btn btn-outline btn-sm" onClick={exportCSV}>
-            <Download size={13} /> Export CSV
+          <button className="btn btn-outline btn-sm" onClick={doExportExcel}>
+            <Download size={13} /> Export Excel
           </button>
           <button className="btn btn-outline btn-sm" onClick={fetchData} disabled={loading}>
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh

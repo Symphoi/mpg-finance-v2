@@ -134,3 +134,22 @@ export function paginationInfo(page: number, limit: number, total: number) {
   const totalPages = Math.ceil(total / limit);
   return { from, to, totalPages, hasNext: page < totalPages, hasPrev: page > 1 };
 }
+
+/**
+ * Export 2D array of data as native .xlsx using SheetJS (xlsx package).
+ * @param rows  - 2D array of string/number values; first row = header
+ * @param filename - without extension
+ * @param sheetName - optional sheet name
+ */
+export async function exportExcel(
+  rows: (string | number)[][],
+  filename: string,
+  sheetName = 'Sheet1'
+): Promise<void> {
+  // Dynamic import so the 800 KB xlsx bundle is only loaded on demand
+  const XLSX = await import('xlsx');
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, `${filename}.xlsx`);
+}

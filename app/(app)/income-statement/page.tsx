@@ -1,6 +1,6 @@
 'use client';
 import { useState, useCallback, useEffect } from 'react';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, exportExcel } from '@/lib/utils';
 import { RefreshCw, Loader2, Printer, Download, TrendingUp, TrendingDown } from 'lucide-react';
 
 interface ISRow {
@@ -24,25 +24,20 @@ interface ISData {
 
 const fmt = (n: number) => formatRupiah(Math.abs(n));
 
-function exportCSV(data: ISData, period: string) {
-  const rows: string[][] = [
+async function doExportExcel(data: ISData, period: string) {
+  const rows: (string | number)[][] = [
     ['Laporan Laba Rugi', '', '', `Periode: ${period}`],
-    [''],
+    [],
     ['Tipe', 'Kode Akun', 'Nama Akun', 'Jumlah'],
-    ...data.revenues.map(r => ['Pendapatan', r.account_code, r.account_name, String(r.balance)]),
-    ['', '', 'Total Pendapatan', String(data.total_revenue)],
-    [''],
-    ...data.expenses.map(r => ['Beban', r.account_code, r.account_name, String(r.balance)]),
-    ['', '', 'Total Beban', String(data.total_expense)],
-    [''],
-    ['', '', 'LABA / RUGI BERSIH', String(data.net_income)],
+    ...data.revenues.map(r => ['Pendapatan', r.account_code, r.account_name, r.balance]),
+    ['', '', 'Total Pendapatan', data.total_revenue],
+    [],
+    ...data.expenses.map(r => ['Beban', r.account_code, r.account_name, r.balance]),
+    ['', '', 'Total Beban', data.total_expense],
+    [],
+    ['', '', 'LABA / RUGI BERSIH', data.net_income],
   ];
-  const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `income-statement-${period}.csv`; a.click();
-  URL.revokeObjectURL(url);
+  await exportExcel(rows, `income-statement-${period}`, 'Laba Rugi');
 }
 
 export default function IncomeStatementPage() {
@@ -82,8 +77,8 @@ export default function IncomeStatementPage() {
         </div>
         <div className="flex gap-2 no-print">
           {data && (
-            <button className="btn btn-outline btn-sm" onClick={() => exportCSV(data, from && to ? `${from}_${to}` : period)}>
-              <Download size={12} /> Export CSV
+            <button className="btn btn-outline btn-sm" onClick={() => doExportExcel(data, from && to ? `${from}_${to}` : period)}>
+              <Download size={12} /> Export Excel
             </button>
           )}
           <button className="btn btn-outline btn-sm" onClick={() => window.print()}>

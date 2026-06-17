@@ -55,6 +55,7 @@ const NAV: NavItem[] = [
     children: [
       { label: 'Kas & Bank',          href: '/bank-accounts' },
       { label: 'Rekonsiliasi',        href: '/bank-reconciliations' },
+      { label: 'Accounting Entry',     href: '/accounting-entry' },
       { label: 'Manual Journal',      href: '/manual-journals' },
       { label: 'Log Jurnal',          href: '/journals' },
       { label: 'Intercompany',        href: '/intercompany' },

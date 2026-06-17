@@ -1,23 +1,18 @@
 'use client';
 import { useState, useCallback, useEffect } from 'react';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, exportExcel } from '@/lib/utils';
 import { RefreshCw, Loader2, CheckCircle2, AlertCircle, Printer, Download } from 'lucide-react';
 
-function exportCSV(data: TBData, period: string) {
-  const rows: string[][] = [
+async function doExportExcel(data: TBData, period: string) {
+  const rows: (string | number)[][] = [
     ['Trial Balance', '', '', '', `Periode: ${period}`],
-    [''],
+    [],
     ['Kode Akun', 'Nama Akun', 'Tipe', 'Debit', 'Kredit', 'Saldo'],
-    ...data.rows.map(r => [r.account_code, r.account_name, r.account_type, String(r.total_debit), String(r.total_credit), String(r.balance)]),
-    [''],
-    ['', '', 'TOTAL', String(data.total_debit), String(data.total_credit), ''],
+    ...data.rows.map(r => [r.account_code, r.account_name, r.account_type, r.total_debit, r.total_credit, r.balance]),
+    [],
+    ['', '', 'TOTAL', data.total_debit, data.total_credit, ''],
   ];
-  const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `trial-balance-${period}.csv`; a.click();
-  URL.revokeObjectURL(url);
+  await exportExcel(rows, `trial-balance-${period}`, 'Trial Balance');
 }
 
 interface TBRow {
@@ -92,8 +87,8 @@ export default function TrialBalancePage() {
         </div>
         <div className="flex gap-2 no-print">
           {data && (
-            <button className="btn btn-outline btn-sm" onClick={() => exportCSV(data, from && to ? `${from}_${to}` : period)}>
-              <Download size={12} /> Export CSV
+            <button className="btn btn-outline btn-sm" onClick={() => doExportExcel(data, from && to ? `${from}_${to}` : period)}>
+              <Download size={12} /> Export Excel
             </button>
           )}
           <button className="btn btn-outline btn-sm" onClick={() => window.print()}>
