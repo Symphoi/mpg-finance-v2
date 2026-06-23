@@ -26,14 +26,23 @@ export const GET = withAuth(async (req: NextRequest, user) => {
           `SELECT
              ar.ar_code, ar.invoice_number, ar.invoice_date, ar.amount,
              ar.tax_amount, ar.outstanding_amount, ar.status, ar.so_code,
-             c.customer_name
+             c.customer_name, c.tax_id AS npwp,
+             so.total_amount AS nilai_kontrak,
+             GROUP_CONCAT(DISTINCT soi.product_name ORDER BY soi.id SEPARATOR ', ') AS items,
+             MIN(po.po_code) AS po_code
            FROM accounts_receivable ar
            LEFT JOIN customers c ON ar.customer_code = c.customer_code
+           LEFT JOIN sales_orders so ON ar.so_code = so.so_code
+           LEFT JOIN sales_order_items soi ON ar.so_code = soi.so_code AND soi.is_deleted = 0
+           LEFT JOIN purchase_orders po ON ar.so_code = po.so_code AND po.is_deleted = 0
            WHERE ar.is_deleted = 0
              AND ar.ar_code NOT IN (
                SELECT source_ref FROM accounting_entries
                WHERE entry_type='AR' AND source_type='system' AND source_ref IS NOT NULL
              )
+           GROUP BY ar.ar_code, ar.invoice_number, ar.invoice_date, ar.amount,
+                    ar.tax_amount, ar.outstanding_amount, ar.status, ar.so_code,
+                    c.customer_name, c.tax_id, so.total_amount
            ORDER BY ar.invoice_date DESC
            LIMIT 200`
         );
@@ -168,6 +177,132 @@ export const PATCH = withAuth(async (req: NextRequest) => {
     );
 
     return ok({ updated: true });
+  } catch (err) { return serverError(err); }
+});
+
+// ── Sync Meta — refresh meta for existing draft system-pulled entries ──────────
+export const PUT = withAuth(async (req: NextRequest) => {
+  try {
+    const { type } = await req.json() as { type: string };
+    if (!['AR', 'AP'].includes(type)) return badRequest('type harus AR atau AP');
+
+    if (type === 'AR') {
+      const entries = await query(
+        `SELECT ae.id, ae.source_ref FROM accounting_entries ae
+         WHERE ae.entry_type='AR' AND ae.source_type='system'
+           AND ae.status='draft' AND ae.source_ref IS NOT NULL`
+      ) as any[];
+
+      if (!entries.length) return ok({ updated: 0 });
+
+      const arCodes = entries.map((e: any) => e.source_ref);
+      const arRows = await query(
+        `SELECT
+           ar.ar_code, ar.invoice_number, ar.invoice_date, ar.amount,
+           ar.tax_amount, ar.outstanding_amount, ar.so_code,
+           c.customer_name, c.tax_id AS npwp,
+           so.total_amount AS nilai_kontrak,
+           GROUP_CONCAT(DISTINCT soi.product_name ORDER BY soi.id SEPARATOR ', ') AS items,
+           MIN(po.po_code) AS po_code
+         FROM accounts_receivable ar
+         LEFT JOIN customers c ON ar.customer_code = c.customer_code
+         LEFT JOIN sales_orders so ON ar.so_code = so.so_code
+         LEFT JOIN sales_order_items soi ON ar.so_code = soi.so_code AND soi.is_deleted = 0
+         LEFT JOIN purchase_orders po ON ar.so_code = po.so_code AND po.is_deleted = 0
+         WHERE ar.ar_code IN (${arCodes.map(() => '?').join(',')})
+         GROUP BY ar.ar_code, ar.invoice_number, ar.invoice_date, ar.amount,
+                  ar.tax_amount, ar.outstanding_amount, ar.so_code,
+                  c.customer_name, c.tax_id, so.total_amount`,
+        arCodes
+      ) as any[];
+
+      const arMap = new Map(arRows.map((r: any) => [r.ar_code, r]));
+
+      let updated = 0;
+      for (const entry of entries) {
+        const row = arMap.get(entry.source_ref);
+        if (!row) continue;
+        const dpp          = Number(row.amount) || 0;
+        const nilaiKontrak = Number(row.nilai_kontrak) || dpp;
+        const ppn          = Math.max(0, nilaiKontrak - dpp);
+        const meta = {
+          so_code:         row.so_code          ?? '',
+          customer_name:   row.customer_name     ?? '',
+          npwp:            row.npwp              ?? '',
+          item:            row.items             ?? '',
+          po_no:           row.po_code           ?? '',
+          invoice_no:      row.invoice_number    ?? '',
+          nilai_kontrak:   nilaiKontrak,
+          dpp,
+          dpp_lainnya:     0,
+          ppn_bendaharawan: 0,
+          ppn,
+          pph_23:          0,
+          pph_22:          0,
+          piutang:         Number(row.outstanding_amount) || 0,
+          no_faktur:       '',
+        };
+        await query(
+          `UPDATE accounting_entries SET meta=?, updated_at=NOW() WHERE id=?`,
+          [JSON.stringify(meta), entry.id]
+        );
+        updated++;
+      }
+      return ok({ updated });
+    }
+
+    if (type === 'AP') {
+      const entries = await query(
+        `SELECT ae.id, ae.source_ref FROM accounting_entries ae
+         WHERE ae.entry_type='AP' AND ae.source_type='system'
+           AND ae.status='draft' AND ae.source_ref IS NOT NULL`
+      ) as any[];
+
+      if (!entries.length) return ok({ updated: 0 });
+
+      const poCodes = entries.map((e: any) => e.source_ref);
+      const poRows = await query(
+        `SELECT po.po_code, po.total_amount, po.tax_amount, po.status, po.so_code,
+                s.supplier_name,
+                GROUP_CONCAT(poi.product_name SEPARATOR ', ') AS items
+         FROM purchase_orders po
+         LEFT JOIN suppliers s ON po.supplier_code = s.supplier_code
+         LEFT JOIN purchase_order_items poi ON po.po_code = poi.po_code
+         WHERE po.po_code IN (${poCodes.map(() => '?').join(',')})
+         GROUP BY po.po_code`,
+        poCodes
+      ) as any[];
+
+      const poMap = new Map(poRows.map((r: any) => [r.po_code, r]));
+
+      let updated = 0;
+      for (const entry of entries) {
+        const row = poMap.get(entry.source_ref);
+        if (!row) continue;
+        const apTotal = Number(row.total_amount) || 0;
+        const apVat   = Number(row.tax_amount)   || 0;
+        const apDpp   = apTotal - apVat;
+        const meta = {
+          supplier_name: row.supplier_name ?? '',
+          item:          row.items         ?? '',
+          so_code:       row.so_code       ?? '',
+          po_no:         row.po_code       ?? '',
+          invoice_no:    '',
+          vat:           apVat,
+          pph_23:        0,
+          ap_amount:     apTotal,
+          ap_status:     row.status        ?? '',
+        };
+        await query(
+          `UPDATE accounting_entries SET amount=?, meta=?, updated_at=NOW() WHERE id=?`,
+          [apDpp, JSON.stringify(meta), entry.id]
+        );
+        updated++;
+      }
+      return ok({ updated });
+    }
+
+    return badRequest('type tidak valid');
   } catch (err) { return serverError(err); }
 });
 

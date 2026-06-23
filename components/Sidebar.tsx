@@ -6,8 +6,9 @@ import {
   LayoutDashboard, FileText, ShoppingCart, CheckSquare, Truck, FileCheck,
   Wallet, Receipt, Calculator, Building, Users, Package, Shield, Percent,
   ListOrdered, Tag, ChevronDown, Settings, LogOut, Bell, Search,
-  BookOpen, GitBranch, Landmark, Scale, AlertCircle, X, TrendingUp
+  BookOpen, GitBranch, Landmark, Scale, AlertCircle, X, TrendingUp, Settings2
 } from 'lucide-react';
+import { useSettings } from '@/contexts/SettingsContext';
 
 interface NavItem {
   label: string;
@@ -60,7 +61,6 @@ const NAV: NavItem[] = [
       { label: 'Log Jurnal',          href: '/journals' },
       { label: 'Intercompany',        href: '/intercompany' },
       { label: 'Chart of Account',    href: '/chart-of-account' },
-      { label: 'Accounting Rules',    href: '/accounting-rules' },
     ],
   },
   {
@@ -94,10 +94,12 @@ const MASTER_NAV: NavItem[] = [
 ];
 
 const SETTINGS_NAV: NavItem[] = [
+  { label: 'User Guide',              href: '/help',                      icon: BookOpen },
   { label: 'Roles & Permissions',     href: '/rbac',                      icon: Shield },
   { label: 'Taxes',                   href: '/taxes',                     icon: Percent },
   { label: 'Numbering Sequences',     href: '/numbering-sequences',       icon: ListOrdered },
   { label: 'Reimburse Categories',    href: '/reimbursement-categories',  icon: Tag },
+  { label: 'System Settings',         href: '/system-settings',           icon: Settings2 },
 ];
 
 function NavGroup({ item }: { item: NavItem }) {
@@ -166,29 +168,35 @@ function NavItem({ item }: { item: NavItem }) {
 
 export default function Sidebar() {
   const router = useRouter();
+  const { settings } = useSettings();
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-    router.push('/login');
+    window.location.href = '/login';
   };
+
+  const firstLetter = (settings.app_name?.[0] ?? 'M').toUpperCase();
 
   return (
     <aside
       className="flex flex-col flex-shrink-0 overflow-hidden"
       style={{
         width: 'var(--sidebar-width)',
-        background: 'var(--sidebar-bg)',
+        background: settings.sidebar_color || 'var(--sidebar-bg)',
       }}
     >
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 py-4 border-b border-white/8">
-        <div className="w-8 h-8 rounded-[10px] flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg,#a855f7,#6366f1)' }}>
-          M
+        <div className="w-8 h-8 rounded-[10px] flex items-center justify-center text-white font-bold text-sm flex-shrink-0 overflow-hidden"
+          style={{ background: settings.logo_url ? 'transparent' : 'linear-gradient(135deg,#a855f7,#6366f1)' }}>
+          {settings.logo_url
+            ? <img src={settings.logo_url} alt="logo" className="w-full h-full object-contain" />
+            : firstLetter
+          }
         </div>
         <div>
-          <div className="text-white font-semibold text-[14px] leading-tight">MPG Finance</div>
-          <div className="text-white/35 text-[10px]">v2.0 · Management</div>
+          <div className="text-white font-semibold text-[14px] leading-tight">{settings.app_name || 'Finance'}</div>
+          <div className="text-white/35 text-[10px]">{settings.app_subtitle || 'v2.0 · Management'}</div>
         </div>
       </div>
 

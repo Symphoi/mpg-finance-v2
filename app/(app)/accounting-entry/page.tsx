@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { formatRupiah, formatDate, exportExcel } from '@/lib/utils';
 import { Download, Plus, Send, Trash2, RefreshCw, FileUp, FileDown, FileText } from 'lucide-react';
 import { toast } from 'sonner';
+import { useDebounce } from '@/hooks/useApi';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface COA { account_code: string; account_name: string; account_type: string; }
@@ -44,25 +45,102 @@ function emptyEntry(type: TabType): Entry {
   };
 }
 
-// ── COA Select ────────────────────────────────────────────────────────────────
+// ── COA Combobox (searchable) ─────────────────────────────────────────────────
 function COASelect({ value, onChange, coas, disabled }: {
   value: string; onChange: (v: string) => void; coas: COA[]; disabled?: boolean;
 }) {
+  const [query, setQuery]       = useState('');
+  const [open, setOpen]         = useState(false);
+  const debouncedQ              = useDebounce(query, 150);
+  const wrapRef                 = useRef<HTMLDivElement>(null);
+
+  // display label for selected value
+  const selected = coas.find(c => c.account_code === value);
+  const displayLabel = selected ? `${selected.account_code} — ${selected.account_name}` : '';
+
+  // filter list
+  const filtered = debouncedQ.trim()
+    ? coas.filter(c =>
+        c.account_code.toLowerCase().includes(debouncedQ.toLowerCase()) ||
+        c.account_name.toLowerCase().includes(debouncedQ.toLowerCase())
+      ).slice(0, 40)
+    : coas.slice(0, 40);
+
+  // close on outside click
+  useEffect(() => {
+    const handler = (ev: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(ev.target as Node)) {
+        setOpen(false);
+        setQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const pick = (code: string) => {
+    onChange(code);
+    setOpen(false);
+    setQuery('');
+  };
+
+  const clear = () => { onChange(''); setQuery(''); };
+
+  if (disabled) {
+    return (
+      <div style={{ fontSize: 11, minWidth: 160, color: 'var(--color-text-muted)', padding: '4px 6px' }}>
+        {displayLabel || '—'}
+      </div>
+    );
+  }
+
   return (
-    <select
-      className="input"
-      style={{ fontSize: 11, minWidth: 160, maxWidth: 220 }}
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      disabled={disabled}
-    >
-      <option value="">— Pilih Akun —</option>
-      {coas.map(c => (
-        <option key={c.account_code} value={c.account_code}>
-          {c.account_code} — {c.account_name}
-        </option>
-      ))}
-    </select>
+    <div ref={wrapRef} style={{ position: 'relative', minWidth: 160 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <input
+          className="input"
+          style={{ fontSize: 11, flex: 1 }}
+          placeholder={displayLabel || '— Cari akun —'}
+          value={open ? query : displayLabel}
+          onFocus={() => { setOpen(true); setQuery(''); }}
+          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+        />
+        {value && (
+          <button type="button" onClick={clear}
+            style={{ fontSize: 10, color: 'var(--color-text-muted)', padding: '0 2px', lineHeight: 1 }}>
+            ×
+          </button>
+        )}
+      </div>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, zIndex: 1000,
+          background: '#fff', border: '1px solid var(--color-border)',
+          borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          maxHeight: 220, overflowY: 'auto', minWidth: 260,
+        }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: '8px 10px', fontSize: 11, color: 'var(--color-text-muted)' }}>
+              Tidak ditemukan
+            </div>
+          )}
+          {filtered.map(c => (
+            <div key={c.account_code}
+              onMouseDown={() => pick(c.account_code)}
+              style={{
+                padding: '6px 10px', fontSize: 11, cursor: 'pointer',
+                background: c.account_code === value ? 'var(--color-primary-light, #ede9fe)' : undefined,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}
+              onMouseLeave={e => (e.currentTarget.style.background = c.account_code === value ? 'var(--color-primary-light, #ede9fe)' : '')}
+            >
+              <span style={{ fontFamily: 'monospace', color: '#7c3aed' }}>{c.account_code}</span>
+              {' — '}{c.account_name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -129,6 +207,7 @@ export default function AccountingEntryPage() {
   const [entries, setEntries]   = useState<Entry[]>([]);
   const [loading, setLoading]   = useState(false);
   const [pulling, setPulling]   = useState(false);
+  const [syncing, setSyncing]   = useState(false);
   const [posting, setPosting]   = useState(false);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -184,34 +263,47 @@ export default function AccountingEntryPage() {
             source_type: 'system',
             source_ref: row.ar_code,
             meta: {
-              customer_name: row.customer_name,
-              invoice_no: row.invoice_number,
-              dpp: row.amount,
-              ppn: row.tax_amount,
-              piutang: row.outstanding_amount,
-              so_code: row.so_code,
+              so_code: row.so_code ?? '',
+              customer_name: row.customer_name ?? '',
+              npwp: row.npwp ?? '',
+              item: row.items ?? '',
+              po_no: row.po_code ?? '',
+              invoice_no: row.invoice_number ?? '',
+              // nilai_kontrak = total SO (DPP + PPN). If no SO linked, fallback to DPP.
+              nilai_kontrak: Number(row.nilai_kontrak) || Number(row.amount) || 0,
+              dpp: Number(row.amount) || 0,
+              dpp_lainnya: 0,
+              ppn_bendaharawan: 0,
+              // PPN = nilai_kontrak − DPP. ar.tax_amount is never set by the system.
+              ppn: Math.max(0, (Number(row.nilai_kontrak) || 0) - (Number(row.amount) || 0)),
+              pph_23: 0,
+              pph_22: 0,
+              piutang: Number(row.outstanding_amount) || 0,
+              no_faktur: '',
             },
           } as Entry;
         }
         // AP
+        const apTotal = Number(row.total_amount) || 0;
+        const apVat   = Number(row.tax_amount)   || 0;
+        const apDpp   = apTotal - apVat;  // DPP = total excluding VAT
         return {
           entry_type: 'AP', status: 'draft',
           entry_date: row.created_at?.split('T')[0] ?? today(),
           description: `AP — ${row.supplier_name ?? ''} — ${row.items ?? ''}`,
           reference: row.po_code,
-          amount: Number(row.total_amount) || 0,
+          amount: apDpp,  // amount = DPP (pre-tax base)
           source_type: 'system',
           source_ref: row.po_code,
           meta: {
-            code: '',
-            supplier_name: row.supplier_name,
+            supplier_name: row.supplier_name ?? '',
             item: row.items ?? '',
             so_code: row.so_code ?? '',
-            po_no: row.po_code,
+            po_no: row.po_code ?? '',
             invoice_no: '',
-            vat: row.tax_amount ?? 0,
+            vat: apVat,
             pph_23: 0,
-            ap_amount: row.total_amount,
+            ap_amount: apTotal,  // total hutang = DPP + VAT
             ap_status: row.status ?? '',
           },
         } as Entry;
@@ -231,6 +323,26 @@ export default function AccountingEntryPage() {
       loadEntries();
     } finally {
       setPulling(false);
+    }
+  };
+
+  // ── Sync Meta — refresh meta for existing draft entries ─────────────────
+  const syncMeta = async () => {
+    if (!['AR', 'AP'].includes(tab)) { toast.info('Sync Meta hanya tersedia untuk tab AR dan AP'); return; }
+    setSyncing(true);
+    try {
+      const res = await fetch('/api/accounting-entries', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ type: tab }),
+      });
+      const j = await res.json();
+      if (!j.success) { toast.error(j.error); return; }
+      toast.success(`Meta diperbarui: ${j.data.updated} entri`);
+      loadEntries();
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -443,9 +555,15 @@ export default function AccountingEntryPage() {
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
         {tab !== 'Bank' && (
-          <button className="btn btn-outline btn-sm" onClick={pullFromSystem} disabled={pulling}>
-            <Download size={13} /> {pulling ? 'Menarik...' : 'Tarik dari Sistem'}
-          </button>
+          <>
+            <button className="btn btn-outline btn-sm" onClick={pullFromSystem} disabled={pulling}>
+              <Download size={13} /> {pulling ? 'Menarik...' : 'Tarik dari Sistem'}
+            </button>
+            <button className="btn btn-outline btn-sm" onClick={syncMeta} disabled={syncing}
+              title="Refresh NPWP, Item, PO No, Nilai Kontrak, PPN dari data terkini">
+              <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Sync...' : 'Sync Meta'}
+            </button>
+          </>
         )}
         <button className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()} disabled={importing}>
           <FileUp size={13} /> {importing ? 'Mengimport...' : 'Import Excel'}
@@ -698,13 +816,13 @@ function ARGrid({ entries, coas, loading, selected, allSelected, toggleAll, togg
               <td style={tdStyle}><span className="tbl-mono" style={{ fontSize: 11 }}>{m.po_no ?? '-'}</span></td>
               <td style={tdStyle}>{e.entry_date ? formatDate(e.entry_date) : '-'}</td>
               <td style={tdStyle}><span className="tbl-mono" style={{ fontSize: 11 }}>{m.invoice_no ?? e.reference ?? '-'}</span></td>
-              <td style={{ ...tdStyle, textAlign: 'right' }}>{m.nilai_kontrak ? formatRupiah(m.nilai_kontrak) : '-'}</td>
-              <td style={{ ...tdStyle, textAlign: 'right' }}>{m.dpp ? formatRupiah(m.dpp) : '-'}</td>
-              <td style={{ ...tdStyle, textAlign: 'right' }}>{m.dpp_lainnya ? formatRupiah(m.dpp_lainnya) : '-'}</td>
-              <td style={{ ...tdStyle, textAlign: 'right' }}>{m.ppn_bendaharawan ? formatRupiah(m.ppn_bendaharawan) : '-'}</td>
-              <td style={{ ...tdStyle, textAlign: 'right' }}>{m.ppn ? formatRupiah(m.ppn) : '-'}</td>
-              <td style={{ ...tdStyle, textAlign: 'right' }}>{m.pph_23 ? formatRupiah(m.pph_23) : '-'}</td>
-              <td style={{ ...tdStyle, textAlign: 'right' }}>{m.pph_22 ? formatRupiah(m.pph_22) : '-'}</td>
+              <td style={{ ...tdStyle, textAlign: 'right' }}>{Number(m.nilai_kontrak) ? formatRupiah(Number(m.nilai_kontrak)) : '-'}</td>
+              <td style={{ ...tdStyle, textAlign: 'right' }}>{Number(m.dpp) ? formatRupiah(Number(m.dpp)) : '-'}</td>
+              <td style={{ ...tdStyle, textAlign: 'right' }}>{Number(m.dpp_lainnya) ? formatRupiah(Number(m.dpp_lainnya)) : '-'}</td>
+              <td style={{ ...tdStyle, textAlign: 'right' }}>{Number(m.ppn_bendaharawan) ? formatRupiah(Number(m.ppn_bendaharawan)) : '-'}</td>
+              <td style={{ ...tdStyle, textAlign: 'right' }}>{Number(m.ppn) ? formatRupiah(Number(m.ppn)) : '-'}</td>
+              <td style={{ ...tdStyle, textAlign: 'right' }}>{Number(m.pph_23) ? formatRupiah(Number(m.pph_23)) : '-'}</td>
+              <td style={{ ...tdStyle, textAlign: 'right' }}>{Number(m.pph_22) ? formatRupiah(Number(m.pph_22)) : '-'}</td>
               <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>{formatRupiah(e.amount)}</td>
               <td style={tdStyle}><span className="tbl-mono" style={{ fontSize: 11 }}>{m.no_faktur ?? '-'}</span></td>
               <td style={tdStyle}>
@@ -739,8 +857,8 @@ function APGrid({ entries, coas, loading, selected, allSelected, toggleAll, togg
           <th style={{ ...thStyle, width: 36 }}>
             <input type="checkbox" checked={allSelected} onChange={toggleAll} />
           </th>
-          {['Code','Supplier','Item','Tgl','Sales Order','PO No.','No Invoice',
-            'Amount','VAT','PPH 23','A/P','Status PO','Dr Akun','Cr Akun','Status Jurnal',''].map((c, i) =>
+          {['No. AE','Supplier','Item','Tgl','Sales Order','PO No.','No Invoice',
+            'DPP','VAT','PPH 23','Total A/P','Status PO','Dr Akun','Cr Akun','Status Jurnal',''].map((c, i) =>
             <th key={i} style={thStyle}>{c}</th>
           )}
         </tr>
@@ -765,10 +883,8 @@ function APGrid({ entries, coas, loading, selected, allSelected, toggleAll, togg
             return (
               <tr key={rowKey} style={{ background: '#fffbeb' }}>
                 <td style={tdStyle} />
-                <td style={tdStyle}>
-                  <input className="input" style={{ fontSize: 11, width: 70 }}
-                    placeholder="Code" value={m.code ?? ''}
-                    onChange={ev => updateNewRow(e._localId!, 'meta.code', ev.target.value)} />
+                <td style={{ ...tdStyle, color: 'var(--color-text-muted)', fontSize: 10 }}>
+                  — auto —
                 </td>
                 <td style={tdStyle}>
                   <input className="input" style={{ fontSize: 11, width: 140 }}
@@ -802,22 +918,22 @@ function APGrid({ entries, coas, loading, selected, allSelected, toggleAll, togg
                 </td>
                 <td style={tdStyle}>
                   <input type="number" className="input" style={{ fontSize: 11, width: 110, textAlign: 'right' }}
-                    placeholder="0" value={e.amount || ''}
+                    placeholder="DPP" value={e.amount || ''}
                     onChange={ev => updateNewRow(e._localId!, 'amount', ev.target.value)} />
                 </td>
                 <td style={tdStyle}>
                   <input type="number" className="input" style={{ fontSize: 11, width: 100, textAlign: 'right' }}
-                    placeholder="0" value={m.vat ?? ''}
+                    placeholder="VAT" value={m.vat ?? ''}
                     onChange={ev => updateNewRow(e._localId!, 'meta.vat', ev.target.value)} />
                 </td>
                 <td style={tdStyle}>
                   <input type="number" className="input" style={{ fontSize: 11, width: 100, textAlign: 'right' }}
-                    placeholder="0" value={m.pph_23 ?? ''}
+                    placeholder="PPh 23" value={m.pph_23 ?? ''}
                     onChange={ev => updateNewRow(e._localId!, 'meta.pph_23', ev.target.value)} />
                 </td>
                 <td style={tdStyle}>
                   <input type="number" className="input" style={{ fontSize: 11, width: 110, textAlign: 'right' }}
-                    placeholder="0" value={m.ap_amount ?? ''}
+                    placeholder="Total A/P" value={m.ap_amount ?? ''}
                     onChange={ev => updateNewRow(e._localId!, 'meta.ap_amount', ev.target.value)} />
                 </td>
                 <td style={tdStyle}>
@@ -850,7 +966,7 @@ function APGrid({ entries, coas, loading, selected, allSelected, toggleAll, togg
               <td style={tdStyle}>
                 {!isPosted && <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(e.id!)} />}
               </td>
-              <td style={tdStyle}><span className="tbl-mono" style={{ fontSize: 11 }}>{m.code ?? '-'}</span></td>
+              <td style={tdStyle}><span className="tbl-mono" style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{e.entry_code ?? '-'}</span></td>
               <td style={tdStyle}><div style={{ maxWidth: 160 }}>{m.supplier_name ?? '-'}</div></td>
               <td style={tdStyle}><div style={{ maxWidth: 180, fontSize: 11, color: 'var(--color-text-muted)' }}>{m.item ?? '-'}</div></td>
               <td style={tdStyle}>{e.entry_date ? formatDate(e.entry_date) : '-'}</td>
@@ -863,7 +979,12 @@ function APGrid({ entries, coas, loading, selected, allSelected, toggleAll, togg
               <td style={{ ...tdStyle, textAlign: 'right' }}>{m.ap_amount ? formatRupiah(m.ap_amount) : '-'}</td>
               <td style={tdStyle}>
                 {m.ap_status
-                  ? <span className={`badge ${m.ap_status.toLowerCase() === 'approved' ? 'badge-green' : 'badge-amber'}`}>{m.ap_status}</span>
+                  ? <span className={`badge ${
+                      m.ap_status === 'paid' ? 'badge-green' :
+                      m.ap_status === 'approved' ? 'badge-blue' :
+                      m.ap_status === 'approved_spv' ? 'badge-purple' :
+                      'badge-amber'
+                    }`}>{m.ap_status}</span>
                   : '-'}
               </td>
               <td style={tdStyle}>

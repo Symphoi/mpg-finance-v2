@@ -3,7 +3,6 @@ import { NextRequest } from 'next/server';
 import { withAuth } from '@/app/lib/auth';
 import { query, queryOne } from '@/app/lib/db';
 import { ok, badRequest } from '@/app/lib/response';
-import { createJournalEntry } from '@/lib/accounting';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 
@@ -148,33 +147,11 @@ export const POST = withAuth(async (req: NextRequest, user: any) => {
 
     // INTERCOMPANY DETECTION
     if (bankCompanyCode && invoiceCompanyCode && bankCompanyCode !== invoiceCompanyCode) {
-      // 1. Journal untuk perusahaan bank (penerima kas)
-      await createJournalEntry({
-        transaction_date: payment_date,
-        description: `Penerimaan kas dari customer untuk invoice ${alloc.ar_code} (atas nama ${invoiceCompanyCode})`,
-        reference_type: 'payment_in_interco',
-        reference_code: paymentCode,
-        total_amount: alloc.amount,
-        transaction_type: 'payment_in_interco',  // RULE010: Debit 10020-00, Credit 2150
-        company_code: bankCompanyCode,
-      }, user);
-
-      // 2. Journal untuk perusahaan pemilik invoice
-      await createJournalEntry({
-        transaction_date: payment_date,
-        description: `Piutang interco dari ${bankCompanyCode} untuk invoice ${alloc.ar_code}`,
-        reference_type: 'ar_to_interco',
-        reference_code: paymentCode,
-        total_amount: alloc.amount,
-        transaction_type: 'ar_to_interco',  // RULE011: Debit 1150, Credit 11101-00
-        company_code: invoiceCompanyCode,
-      }, user);
-
-      // 3. Update AR di perusahaan pemilik invoice
+      // Update AR di perusahaan pemilik invoice
       await query(`
-        UPDATE accounts_receivable 
-        SET outstanding_amount = outstanding_amount - ?, 
-            status = IF(outstanding_amount - ? <= 0, 'paid', 'partial') 
+        UPDATE accounts_receivable
+        SET outstanding_amount = outstanding_amount - ?,
+            status = IF(outstanding_amount - ? <= 0, 'paid', 'partial')
         WHERE ar_code = ?
       `, [alloc.amount, alloc.amount, alloc.ar_code]);
 
@@ -187,9 +164,9 @@ export const POST = withAuth(async (req: NextRequest, user: any) => {
     } else {
       // Non-intercompany (normal)
       await query(`
-        UPDATE accounts_receivable 
-        SET outstanding_amount = outstanding_amount - ?, 
-            status = IF(outstanding_amount - ? <= 0, 'paid', 'partial') 
+        UPDATE accounts_receivable
+        SET outstanding_amount = outstanding_amount - ?,
+            status = IF(outstanding_amount - ? <= 0, 'paid', 'partial')
         WHERE ar_code = ?
       `, [alloc.amount, alloc.amount, alloc.ar_code]);
 
@@ -198,16 +175,6 @@ export const POST = withAuth(async (req: NextRequest, user: any) => {
         VALUES (?, ?, ?)
       `, [paymentCode, alloc.ar_code, alloc.amount]);
 
-      // Create journal entry normal
-      await createJournalEntry({
-        transaction_date: payment_date,
-        description: `Payment ${paymentCode} - invoice ${alloc.ar_code}`,
-        reference_type: 'payment',
-        reference_code: paymentCode,
-        total_amount: alloc.amount,
-        transaction_type: 'payment_in',
-        company_code: invoiceCompanyCode || bankCompanyCode,
-      }, user);
     }
   }
 

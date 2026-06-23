@@ -188,89 +188,78 @@ export const GET = withAuth(async (req: NextRequest) => {
 
 // ============================== POST: Create PO ==============================
 export const POST = withAuth(async (req: NextRequest, user: any) => {
-  const formData = await req.formData();
-  const dataField = formData.get('data');
-  if (!dataField) return badRequest('Data is required');
+  try {
+    // Support both JSON and multipart/form-data
+    let poData: any;
+    const ct = req.headers.get('content-type') ?? '';
+    if (ct.includes('multipart/form-data')) {
+      const formData = await req.formData();
+      const dataField = formData.get('data');
+      if (!dataField) return badRequest('Data is required');
+      try { poData = JSON.parse(dataField as string); } catch { return badRequest('Invalid JSON'); }
+    } else {
+      poData = await req.json();
+    }
 
-  let poData: any;
-  try { poData = JSON.parse(dataField as string); } catch { return badRequest('Invalid JSON'); }
+    const {
+      so_code = null, supplier_code,
+      tax_amount = 0, tax_configuration = 'percentage',
+      notes = null, items = []
+    } = poData;
 
-  const {
-    so_code = null, supplier_code, total_amount = 0,
-    tax_amount = 0, tax_configuration = 'percentage',
-    notes = null, items = []
-  } = poData;
+    if (!supplier_code) return badRequest('Supplier is required');
+    if (!items?.length) return badRequest('Minimal 1 item');
 
-  if (!supplier_code) return badRequest('Supplier is required');
-  if (!items?.length) return badRequest('Minimal 1 item');
-
-  let customerCode = '';
-  let projectCode = '';
-  let companyCode = '';
-  if (so_code) {
-    const soData: any = await queryOne(
-      'SELECT customer_code, project_code FROM sales_orders WHERE so_code = ? AND is_deleted = FALSE',
-      [so_code]
-    );
-    if (soData) {
-      customerCode = soData.customer_code || '';
-      projectCode = soData.project_code || '';
-      if (projectCode) {
-        const proj: any = await queryOne(
-          'SELECT company_code FROM projects WHERE project_code = ? AND is_deleted = FALSE',
-          [projectCode]
-        );
-        companyCode = proj?.company_code || '';
+    let customerCode = '';
+    let projectCode = '';
+    let companyCode = '';
+    if (so_code) {
+      const soData: any = await queryOne(
+        'SELECT customer_code, project_code FROM sales_orders WHERE so_code = ? AND is_deleted = FALSE',
+        [so_code]
+      );
+      if (soData) {
+        customerCode = soData.customer_code || '';
+        projectCode = soData.project_code || '';
+        if (projectCode) {
+          const proj: any = await queryOne(
+            'SELECT company_code FROM projects WHERE project_code = ? AND is_deleted = FALSE',
+            [projectCode]
+          );
+          companyCode = proj?.company_code || '';
+        }
       }
     }
-  }
-  const salesCode = user?.user_code || user?.code || '';
+    const salesCode = user?.user_code || user?.code || '';
+    const poCode = (await getNextSequence('PO', customerCode, projectCode, companyCode, salesCode)).code;
+    const userCode = user?.user_code || user?.name || 'system';
 
-  const poCode = (await getNextSequence('PO', customerCode, projectCode, companyCode, salesCode)).code;
-  const userCode = user?.user_code || user?.name || 'system';
+    // Compute total from items; accept purchase_price OR unit_price
+    const computedTotal = items.reduce((s: number, it: any) =>
+      s + (it.quantity || 0) * (it.purchase_price ?? it.unit_price ?? 0), 0);
 
-  await query(
-    `INSERT INTO purchase_orders (po_code, so_code, supplier_code, total_amount, tax_amount, tax_configuration, status, notes, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, 'submitted', ?, ?)`,
-    [poCode, so_code, supplier_code, total_amount, tax_amount, tax_configuration, notes, userCode]
-  );
-
-  for (const item of items) {
-    const poiCode = `POI-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     await query(
-      `INSERT INTO purchase_order_items (po_item_code, po_code, product_code, product_name, quantity, purchase_price, supplier)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [poiCode, poCode, item.product_code, item.product_name, item.quantity, item.unit_price, supplier_code]
+      `INSERT INTO purchase_orders (po_code, so_code, supplier_code, total_amount, tax_amount, tax_configuration, status, notes, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, 'submitted', ?, ?)`,
+      [poCode, so_code, supplier_code, computedTotal, tax_amount, tax_configuration, notes, userCode]
     );
-  }
 
-  // Upload files
-  const poFile = formData.get('po_document') as File | null;
-  const otherFiles = formData.getAll('other_docs').filter(f => f instanceof File && f.size > 0) as File[];
-  for (const file of [poFile, ...otherFiles]) {
-    if (!file) continue;
-    const timestamp = Date.now();
-    const randomString = Math.random().toString(36).substr(2, 9);
-    const ext = file.name.split('.').pop();
-    const filename = `po_${timestamp}_${randomString}.${ext}`;
-    const fs = require('fs/promises');
-    const path = require('path');
-    const dir = path.join(process.cwd(), 'public', 'uploads', 'purchase-orders');
-    await fs.mkdir(dir, { recursive: true });
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.writeFile(path.join(dir, filename), buffer);
-    await query(
-      `INSERT INTO po_attachments (attachment_code, reference_type, reference_code, filename, original_filename, file_type, file_size, file_path)
-       VALUES (?, 'po', ?, ?, ?, ?, ?, ?)`,
-      [`ATT-${timestamp}-${randomString}`, poCode, filename, file.name, file.type, file.size, `/uploads/purchase-orders/${filename}`]
-    );
-  }
+    for (const item of items) {
+      const poiCode = `POI-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+      const price = item.purchase_price ?? item.unit_price ?? 0;
+      await query(
+        `INSERT INTO purchase_order_items (po_item_code, po_code, product_code, product_name, quantity, purchase_price, supplier)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [poiCode, poCode, item.product_code ?? null, item.product_name, item.quantity, price, item.supplier ?? supplier_code]
+      );
+    }
 
-  if (so_code) {
-    await query("UPDATE sales_orders SET status = 'processing' WHERE so_code = ? AND status = 'submitted'", [so_code]);
-  }
+    if (so_code) {
+      await query("UPDATE sales_orders SET status='processing' WHERE so_code=? AND status='submitted'", [so_code]);
+    }
 
-  return created({ message: 'PO berhasil dibuat', po_code: poCode, data: { po_code: poCode, status: 'submitted' } });
+    return created({ message: 'PO berhasil dibuat', po_code: poCode, data: { po_code: poCode, status: 'submitted' } });
+  } catch (err) { return serverError(err); }
 });
 
 // ============================== PUT: Payment ==============================

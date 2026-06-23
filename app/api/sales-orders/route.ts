@@ -363,6 +363,13 @@ export const POST = withAuth(async (req: NextRequest) => {
       ]);
     }
 
+    // Recompute total_amount from inserted items
+    const computedTotal = validItems.reduce((s: number, it: any) => s + (it.quantity * it.unit_price), 0);
+    await query(
+      `UPDATE sales_orders SET total_amount=?, updated_at=NOW() WHERE so_code=?`,
+      [computedTotal, soCode]
+    );
+
     // Upload files
     const otherFiles = formData.getAll('other_docs').filter(
       (file) => file instanceof File && file.size > 0

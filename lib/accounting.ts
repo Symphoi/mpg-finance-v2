@@ -367,17 +367,6 @@ export async function createAR(
     ar.description || null,
   ]);
 
-  await createJournalEntry({
-    transaction_date: ar.invoice_date,
-    description: `AR ${arCode} - ${ar.customer_name}`,
-    reference_type: 'ar_invoice',
-    reference_code: arCode,
-    total_amount: ar.amount,
-    transaction_type: 'sale',
-    tax_amount: taxAmount,
-    company_code: ar.company_code,
-  }, user);
-
   await auditLog(
     user.user_code || 'system',
     user.name || 'System',
@@ -431,17 +420,6 @@ export async function createAP(
     ap.company_code || null,
     ap.description || null,
   ]);
-
-  await createJournalEntry({
-    transaction_date: ap.invoice_date,
-    description: `AP ${apCode} - ${ap.supplier_name}`,
-    reference_type: 'ap_invoice',
-    reference_code: apCode,
-    total_amount: ap.amount,
-    transaction_type: 'purchase',
-    tax_amount: taxAmount,
-    company_code: ap.company_code,
-  }, user);
 
   await auditLog(
     user.user_code || 'system',

@@ -112,24 +112,22 @@ export const POST = withAuth(async (req: NextRequest, user) => {
 
     await query(`
       INSERT INTO ca_settlements
-        (settlement_code, ca_code, total_expense, remaining_amount, remaining_action,
-         notes, bank_account_code, attachment_url, settled_by, settled_by_code,
-         settled_at, is_deleted, created_at, updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,NOW(),0,NOW(),NOW())
-    `, [settCode, ca_code, totalExpense, remaining < 0 ? 0 : remaining,
-        remaining_action ?? 'return', notes ?? null, bank_account_code ?? null,
-        attachment_url ?? null, user.name, user.user_code]);
+        (settlement_code, ca_code, total_ca_amount, total_used_amount, remaining_amount,
+         settlement_date, status, created_by, is_deleted, created_at, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,0,NOW(),NOW())
+    `, [settCode, ca_code, Number(caRow.total_amount), totalExpense, remaining < 0 ? 0 : remaining,
+        today, 'submitted', user.name]);
 
     for (const item of expense_items as any[]) {
       await query(`
         INSERT INTO ca_transactions
           (transaction_code, ca_code, transaction_date, description, amount,
-           category, receipt_url, is_deleted, created_at, updated_at)
+           category, created_by, is_deleted, created_at, updated_at)
         VALUES (?,?,?,?,?,?,?,0,NOW(),NOW())
       `, [
         `CATX-${Math.random().toString(36).slice(2,8).toUpperCase()}`,
         ca_code, item.date ?? today, item.description, item.amount,
-        item.category ?? null, item.receipt_url ?? null,
+        item.category ?? 'operasional', user.name,
       ]);
     }
 

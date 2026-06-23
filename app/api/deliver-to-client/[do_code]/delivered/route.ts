@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 import { withAuth } from '@/app/lib/auth';
 import { query, queryOne } from '@/app/lib/db';
 import { ok, badRequest, notFound } from '@/app/lib/response';
-import { createAR, createCOGSJournal, calculateCOGSFromDO, getCompanyCodeFromSO } from '@/lib/accounting';
+import { createAR, getCompanyCodeFromSO } from '@/lib/accounting';
 
 export const PATCH = withAuth(async (req: NextRequest, user: any) => {
   const url = new URL(req.url);
@@ -53,20 +53,7 @@ export const PATCH = withAuth(async (req: NextRequest, user: any) => {
     company_code: companyCode,
   }, user);
   
-  // 2. Create COGS Journal
-  const totalCOGS = await calculateCOGSFromDO(do_code);
-  
-  if (totalCOGS > 0) {
-    await createCOGSJournal({
-      do_code: do_code,
-      so_code: doData.so_code,
-      total_cogs: totalCOGS,
-      transaction_date: delivered_date,
-      company_code: companyCode,
-    }, user);
-  }
-  
-  // 3. Update DO status
+  // 2. Update DO status
   await query(`
     UPDATE delivery_orders 
     SET status = 'delivered', 
@@ -113,7 +100,6 @@ export const PATCH = withAuth(async (req: NextRequest, user: any) => {
       delivered_date,
       delivered_by,
       total_revenue: doData.total_amount,
-      total_cogs: totalCOGS,
       all_items_delivered: remainingItems.length === 0
     }
   });

@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 interface BankAccount {
   id: number; account_code: string; bank_name: string; account_number: string;
   account_holder: string; branch: string; currency: string; description: string;
-  is_active: number; created_at: string;
+  is_active: number; company_code: string; company_name: string; created_at: string;
 }
 
 export default function BankAccountsPage() {
@@ -61,17 +61,18 @@ export default function BankAccountsPage() {
         <div className="tbl-wrapper">
           <table className="tbl">
             <thead>
-              <tr><th>Kode</th><th>Bank</th><th>No. Rekening</th><th>Atas Nama</th><th>Cabang</th><th>Mata Uang</th><th>Status</th><th>Dibuat</th><th></th></tr>
+              <tr><th>Kode</th><th>Bank</th><th>No. Rekening</th><th>Atas Nama</th><th>Perusahaan</th><th>Cabang</th><th>Mata Uang</th><th>Status</th><th>Dibuat</th><th></th></tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={9} className="text-center py-8" style={{ color: 'var(--color-text-muted)' }}>Memuat...</td></tr>}
-              {!loading && data.length === 0 && <tr><td colSpan={9} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>Tidak ada rekening</td></tr>}
+              {loading && <tr><td colSpan={10} className="text-center py-8" style={{ color: 'var(--color-text-muted)' }}>Memuat...</td></tr>}
+              {!loading && data.length === 0 && <tr><td colSpan={10} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>Tidak ada rekening</td></tr>}
               {data.map((b) => (
                 <tr key={b.id}>
                   <td><span className="tbl-mono">{b.account_code}</span></td>
                   <td><div className="font-medium" style={{ color: 'var(--color-text)' }}>{b.bank_name}</div></td>
                   <td><span className="font-mono text-[12px]">{b.account_number}</span></td>
                   <td>{b.account_holder}</td>
+                  <td><span className="text-[12px]">{b.company_name || '-'}</span></td>
                   <td>{b.branch || '-'}</td>
                   <td><span className="badge badge-blue">{b.currency || 'IDR'}</span></td>
                   <td><span className={`badge ${b.is_active ? 'badge-green' : 'badge-gray'}`}>{b.is_active ? 'Aktif' : 'Nonaktif'}</span></td>

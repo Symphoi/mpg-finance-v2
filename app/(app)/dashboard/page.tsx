@@ -49,36 +49,15 @@ const fmt = (n: number) => formatRupiahCompact(Math.abs(n || 0));
 
 // ─── KPI Card ───────────────────────────────────────────────────────────────
 
-const VARIANT = {
-  purple: { accent: '#7C3AED', text: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' },
-  red:    { accent: '#DC2626', text: '#DC2626', bg: '#FEF2F2', border: '#FECACA' },
-  green:  { accent: '#059669', text: '#059669', bg: '#ECFDF5', border: '#A7F3D0' },
-  indigo: { accent: '#4F46E5', text: '#4F46E5', bg: '#EEF2FF', border: '#C7D2FE' },
-};
-
-function KPICard({ label, value, sub, trend, variant }: {
+function KPICard({ label, value, sub, trend }: {
   label: string;
   value: string;
   sub?: string;
   trend?: number | null;
-  variant: keyof typeof VARIANT;
 }) {
-  const v = VARIANT[variant];
   const positive = (trend ?? 0) >= 0;
   return (
-    <div style={{
-      background: '#fff',
-      border: `1px solid #EAE8FF`,
-      borderRadius: 14,
-      padding: '18px 20px',
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
-      <div style={{
-        position: 'absolute', top: 0, left: 0,
-        width: 4, height: '100%',
-        background: v.accent, borderRadius: '4px 0 0 4px',
-      }} />
+    <div className="card" style={{ padding: '18px 20px' }}>
       <div style={{
         fontSize: 10.5, fontWeight: 600, color: '#A5A3C8',
         textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10,
@@ -87,22 +66,21 @@ function KPICard({ label, value, sub, trend, variant }: {
       </div>
       <div style={{
         fontSize: 22, fontWeight: 700, letterSpacing: '-0.8px',
-        color: v.text, lineHeight: 1, fontVariantNumeric: 'tabular-nums',
+        color: 'var(--color-text)', lineHeight: 1, fontVariantNumeric: 'tabular-nums',
       }}>
         {value}
       </div>
       <div style={{
         marginTop: 10, paddingTop: 10,
-        borderTop: '1px solid #F3F1FF',
+        borderTop: '1px solid var(--color-border-soft)',
         display: 'flex', alignItems: 'center', gap: 6,
       }}>
         {trend != null && (
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 3,
             padding: '2px 8px', borderRadius: 20, fontSize: 10.5, fontWeight: 600,
-            background: positive ? v.bg : '#FEF2F2',
-            color: positive ? v.text : '#DC2626',
-            border: `1px solid ${positive ? v.border : '#FECACA'}`,
+            background: positive ? '#ECFDF5' : '#FEF2F2',
+            color: positive ? '#059669' : '#DC2626',
           }}>
             {positive ? '↑' : '↓'} {Math.abs(trend).toFixed(1)}%
           </span>
@@ -394,10 +372,10 @@ export default function DashboardPage() {
         <>
           {/* KPI Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
-            <KPICard label="Total Aset"      value={fmt(bs.total_assets)}           variant="purple" />
-            <KPICard label="Total Liabilitas" value={fmt(bs.total_liabilities)}       variant="red" />
-            <KPICard label="Total Ekuitas"   value={fmt(totalEquityWithNetIncome)}   sub="termasuk Laba/Rugi Berjalan" variant="green" />
-            <KPICard label="Laba Bersih"     value={fmt(is_.net_income)}             sub={isProfit ? 'Laba' : 'Rugi'} variant={isProfit ? 'indigo' : 'red'} />
+            <KPICard label="Total Aset"      value={fmt(bs.total_assets)} />
+            <KPICard label="Total Liabilitas" value={fmt(bs.total_liabilities)} />
+            <KPICard label="Total Ekuitas"   value={fmt(totalEquityWithNetIncome)}   sub="termasuk Laba/Rugi Berjalan" />
+            <KPICard label="Laba Bersih"     value={fmt(is_.net_income)}             sub={isProfit ? 'Laba' : 'Rugi'} />
           </div>
 
           {/* Tab: Overview or Balance Sheet */}

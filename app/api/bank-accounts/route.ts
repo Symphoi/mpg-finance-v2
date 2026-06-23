@@ -12,14 +12,14 @@ export const GET = withAuth(async (req: NextRequest) => {
     const offset = (page - 1) * limit;
     const search = url.searchParams.get('search') ?? '';
 
-    const conditions = ['is_deleted=0'];
+    const conditions = ['ba.is_deleted=0'];
     const params: unknown[] = [];
-    if (search) { conditions.push('(bank_name LIKE ? OR account_number LIKE ? OR account_holder LIKE ?)'); params.push(`%${search}%`,`%${search}%`,`%${search}%`); }
+    if (search) { conditions.push('(ba.bank_name LIKE ? OR ba.account_number LIKE ? OR ba.account_holder LIKE ?)'); params.push(`%${search}%`,`%${search}%`,`%${search}%`); }
 
     const where = conditions.join(' AND ');
     const [rows, count] = await Promise.all([
-      query(`SELECT * FROM bank_accounts WHERE ${where} ORDER BY bank_name ASC LIMIT ? OFFSET ?`, [...params, limit, offset]),
-      query(`SELECT COUNT(*) AS total FROM bank_accounts WHERE ${where}`, params),
+      query(`SELECT ba.*, c.name AS company_name FROM bank_accounts ba LEFT JOIN companies c ON ba.company_code = c.company_code WHERE ${where} ORDER BY ba.bank_name ASC LIMIT ? OFFSET ?`, [...params, limit, offset]),
+      query(`SELECT COUNT(*) AS total FROM bank_accounts ba WHERE ${where}`, params),
     ]);
     return paginated(rows, Number((count as any[])[0]?.total ?? 0), page, limit);
   } catch (err) { return serverError(err); }

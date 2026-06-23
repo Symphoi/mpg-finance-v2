@@ -2,6 +2,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell, Settings, Search, AlertCircle, Clock, X, ExternalLink } from 'lucide-react';
+import { useSettings } from '@/contexts/SettingsContext';
 
 const BREADCRUMB_MAP: Record<string, string> = {
   '/dashboard':               'Dashboard',
@@ -22,7 +23,6 @@ const BREADCRUMB_MAP: Record<string, string> = {
   '/journals':                'Log Jurnal',
   '/intercompany':            'Intercompany',
   '/chart-of-account':        'Chart of Account',
-  '/accounting-rules':        'Accounting Rules',
   '/trial-balance':           'Trial Balance',
   '/general-ledger':          'General Ledger',
   '/income-statement':        'Income Statement',
@@ -37,6 +37,9 @@ const BREADCRUMB_MAP: Record<string, string> = {
   '/rbac':                    'Roles & Permissions',
   '/numbering-sequences':     'Numbering Sequences',
   '/reimbursement-categories':'Reimburse Categories',
+  '/system-settings':         'System Settings',
+  '/help':                    'User Guide',
+  '/accounting-entry':        'Accounting Entry',
 };
 
 interface Notif {
@@ -71,7 +74,8 @@ const REFRESH_INTERVAL = 5 * 60 * 1000;
 export default function Topbar() {
   const pathname = usePathname();
   const router   = useRouter();
-  const page     = Object.entries(BREADCRUMB_MAP).find(([k]) => pathname.startsWith(k))?.[1] ?? 'MPG Finance';
+  const { settings } = useSettings();
+  const page     = Object.entries(BREADCRUMB_MAP).find(([k]) => pathname.startsWith(k))?.[1] ?? settings.app_name ?? 'Finance';
 
   const [notifs, setNotifs]         = useState<Notif[]>([]);
   const [notifOpen, setNotifOpen]   = useState(false);
@@ -116,7 +120,7 @@ export default function Topbar() {
     >
       {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 text-[12.5px]">
-        <span style={{ color: 'var(--color-text-muted)' }}>MPG Finance</span>
+        <span style={{ color: 'var(--color-text-muted)' }}>{settings.app_name || 'Finance'}</span>
         <span style={{ color: 'var(--color-border)' }}>›</span>
         <span style={{ color: 'var(--color-text)', fontWeight: 500 }}>{page}</span>
       </div>

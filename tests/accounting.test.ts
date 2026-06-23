@@ -252,20 +252,9 @@ describe('createPayment — intercompany', () => {
 describe('createAR', () => {
   beforeEach(() => { vi.resetAllMocks(); clearAccountingCache(); });
 
-  it('saves company_code in journal entry', async () => {
-    // query: UPDATE numbering(AR), INSERT AR, getTransactionTypes, rest
-    mockQuery
-      .mockResolvedValueOnce({ affectedRows: 1 })
-      .mockResolvedValueOnce({ affectedRows: 1 })
-      .mockResolvedValueOnce(ALL_TYPES)
-      .mockResolvedValue({ affectedRows: 1 });
-
-    // queryOne: generateCode(AR), company rule, global rule, generateCode(JNL)
-    mockQueryOne
-      .mockResolvedValueOnce({ next_number: 1, prefix: 'AR-' })
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ debit_account_code: '10300-00', credit_account_code: '40000-00', tax_account_code: null })
-      .mockResolvedValueOnce({ next_number: 1, prefix: 'JNL-' });
+  it('inserts AR record with correct company_code', async () => {
+    mockQuery.mockResolvedValue({ affectedRows: 1 });
+    mockQueryOne.mockResolvedValueOnce({ next_number: 1, prefix: 'AR-' });
 
     await createAR({
       customer_name: 'PT Test',
@@ -279,11 +268,12 @@ describe('createAR', () => {
       company_code: 'COMP_AR',
     }, MOCK_USER);
 
-    const journalCall = mockQuery.mock.calls.find(
-      ([sql]: any) => typeof sql === 'string' && sql.includes('INSERT INTO journal_entries')
+    const arInsert = mockQuery.mock.calls.find(
+      ([sql]: any) => typeof sql === 'string' && sql.includes('INSERT INTO accounts_receivable')
     );
-    expect(journalCall).toBeDefined();
-    expect(journalCall![1][6]).toBe('COMP_AR'); // company_code at index 6
+    expect(arInsert).toBeDefined();
+    // company_code is the 10th param (index 9) in INSERT accounts_receivable
+    expect(arInsert![1]).toContain('COMP_AR');
   });
 });
 
@@ -291,18 +281,9 @@ describe('createAR', () => {
 describe('createAP', () => {
   beforeEach(() => { vi.resetAllMocks(); clearAccountingCache(); });
 
-  it('saves company_code in journal entry', async () => {
-    mockQuery
-      .mockResolvedValueOnce({ affectedRows: 1 })
-      .mockResolvedValueOnce({ affectedRows: 1 })
-      .mockResolvedValueOnce(ALL_TYPES)
-      .mockResolvedValue({ affectedRows: 1 });
-
-    mockQueryOne
-      .mockResolvedValueOnce({ next_number: 1, prefix: 'AP-' })
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ debit_account_code: '50000-00', credit_account_code: '20101-00', tax_account_code: null })
-      .mockResolvedValueOnce({ next_number: 1, prefix: 'JNL-' });
+  it('inserts AP record with correct company_code', async () => {
+    mockQuery.mockResolvedValue({ affectedRows: 1 });
+    mockQueryOne.mockResolvedValueOnce({ next_number: 1, prefix: 'AP-' });
 
     await createAP({
       supplier_name: 'CV Supplier',
@@ -315,11 +296,11 @@ describe('createAP', () => {
       company_code: 'COMP_AP',
     }, MOCK_USER);
 
-    const journalCall = mockQuery.mock.calls.find(
-      ([sql]: any) => typeof sql === 'string' && sql.includes('INSERT INTO journal_entries')
+    const apInsert = mockQuery.mock.calls.find(
+      ([sql]: any) => typeof sql === 'string' && sql.includes('INSERT INTO accounts_payable')
     );
-    expect(journalCall).toBeDefined();
-    expect(journalCall![1][6]).toBe('COMP_AP');
+    expect(apInsert).toBeDefined();
+    expect(apInsert![1]).toContain('COMP_AP');
   });
 });
 

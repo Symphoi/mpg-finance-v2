@@ -5,7 +5,9 @@ const COOKIE_NAME = 'mpg_token';
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  const isPublic = pathname.startsWith('/login') || pathname.startsWith('/api/auth');
+  const isPublic = pathname.startsWith('/login')
+    || pathname.startsWith('/api/auth')
+    || pathname === '/api/system-settings';
 
   if (isPublic) return NextResponse.next();
 

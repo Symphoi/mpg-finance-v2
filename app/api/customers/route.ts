@@ -34,12 +34,12 @@ export const GET = withAuth(async (req: NextRequest) => {
 
 export const POST = withAuth(async (req: NextRequest) => {
   try {
-    const { name, phone, email, address, city, type = 'company', contact_person, tax_id } = await req.json();
+    const { name, phone, email, address, type = 'company', contact_person, tax_id } = await req.json();
     if (!name?.trim()) return badRequest('Nama wajib diisi');
 
     const code = `CUST${Math.random().toString(36).slice(2,6).toUpperCase()}`;
-    await query(`INSERT INTO customers (customer_code, customer_name, phone, email, address, city, type, contact_person, tax_id, is_deleted, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,0,NOW(),NOW())`,
-      [code, name, phone ?? null, email ?? null, address ?? null, city ?? null, type, contact_person ?? null, tax_id ?? null]);
+    await query(`INSERT INTO customers (customer_code, customer_name, phone, email, billing_address, shipping_address, customer_type, contact_person, tax_id, is_deleted, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,0,NOW(),NOW())`,
+      [code, name, phone ?? null, email ?? null, address ?? null, address ?? null, type, contact_person ?? null, tax_id ?? null]);
     
     return created({ customer_code: code });
   } catch (err) { 

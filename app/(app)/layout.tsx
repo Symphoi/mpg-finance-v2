@@ -4,6 +4,7 @@
 
   import Sidebar from '@/components/Sidebar';
   import Topbar from '@/components/Topbar';
+  import { SettingsProvider } from '@/contexts/SettingsContext';
 
   export default async function AppLayout({ children }: { children: React.ReactNode }) {
     const cookieStore = await cookies();
@@ -14,12 +15,14 @@
     }
 
     return (
-      <div className="app-layout">
-        <Sidebar />
-        <div className="main-content">
-          <Topbar />
-          <main className="page-body">{children}</main>
+      <SettingsProvider>
+        <div className="app-layout">
+          <Sidebar />
+          <div className="main-content">
+            <Topbar />
+            <main className="page-body">{children}</main>
+          </div>
         </div>
-      </div>
+      </SettingsProvider>
     );
   }

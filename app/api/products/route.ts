@@ -2,7 +2,7 @@
 import { NextRequest } from 'next/server';
 import { withAuth } from '@/app/lib/auth';
 import { query } from '@/app/lib/db';
-import { created, paginated, badRequest, serverError } from '@/app/lib/response';
+import { ok, created, paginated, badRequest, serverError } from '@/app/lib/response';
 
 export const GET = withAuth(async (req: NextRequest) => {
   try {
@@ -57,7 +57,22 @@ export const POST = withAuth(async (req: NextRequest) => {
       [product_code, product_name, description ?? null, category ?? null, unit_type ?? 'pcs', unit_price ?? 0, cost_price ?? 0]);
     
     return created({ product_code });
-  } catch (err) { 
-    return serverError(err); 
+  } catch (err) {
+    return serverError(err);
+  }
+});
+
+export const PUT = withAuth(async (req: NextRequest) => {
+  try {
+    const { product_code, product_name, description, category, unit_type, unit_price, cost_price } = await req.json();
+    if (!product_code) return badRequest('product_code wajib diisi');
+    if (!product_name?.trim()) return badRequest('Nama produk wajib diisi');
+    await query(
+      `UPDATE products SET product_name=?, description=?, category=?, unit_type=?, unit_price=?, cost_price=?, updated_at=NOW() WHERE product_code=? AND is_deleted=0`,
+      [product_name, description ?? null, category ?? null, unit_type ?? 'pcs', unit_price ?? 0, cost_price ?? 0, product_code]
+    );
+    return ok({ product_code });
+  } catch (err) {
+    return serverError(err);
   }
 });

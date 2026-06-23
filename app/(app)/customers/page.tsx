@@ -6,8 +6,8 @@ import { Plus, Search, Eye, X, Filter } from 'lucide-react';
 import Pagination from '@/components/Pagination';
 
 interface Customer {
-  id: number; customer_code: string; name: string; phone: string;
-  email: string; address: string; city: string; type: string;
+  id: number; customer_code: string; customer_name: string; phone: string;
+  email: string; billing_address: string; customer_type: string;
   contact_person: string; tax_id: string; created_at: string;
 }
 
@@ -16,7 +16,7 @@ export default function CustomersPage() {
   const [search, setS] = useState('');
   const [detail, setDetail] = useState<Customer | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ name:'', phone:'', email:'', address:'', city:'', type:'company', contact_person:'', tax_id:'' });
+  const [form, setForm] = useState({ name:'', phone:'', email:'', address:'', type:'company', contact_person:'', tax_id:'' });
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
@@ -27,7 +27,7 @@ export default function CustomersPage() {
       const j   = await res.json();
       if (!j.success) throw new Error(j.error);
       setShowCreate(false);
-      setForm({ name:'', phone:'', email:'', address:'', city:'', type:'company', contact_person:'', tax_id:'' });
+      setForm({ name:'', phone:'', email:'', address:'', type:'company', contact_person:'', tax_id:'' });
       setSearch('');
     } catch {}
     setSaving(false);
@@ -58,7 +58,7 @@ export default function CustomersPage() {
         <div className="tbl-wrapper">
           <table className="tbl">
             <thead>
-              <tr><th>Kode</th><th>Nama</th><th>Telepon</th><th>Email</th><th>Kota</th><th>Tipe</th><th>Dibuat</th><th></th></tr>
+              <tr><th>Kode</th><th>Nama</th><th>Telepon</th><th>Email</th><th>Alamat</th><th>Tipe</th><th>Dibuat</th><th></th></tr>
             </thead>
             <tbody>
               {loading && <tr><td colSpan={8} className="text-center py-8" style={{ color: 'var(--color-text-muted)' }}>Memuat...</td></tr>}
@@ -66,11 +66,11 @@ export default function CustomersPage() {
               {data.map((c) => (
                 <tr key={c.id}>
                   <td><span className="tbl-mono">{c.customer_code}</span></td>
-                  <td><div className="font-medium" style={{ color: 'var(--color-text)' }}>{c.name}</div></td>
+                  <td><div className="font-medium" style={{ color: 'var(--color-text)' }}>{c.customer_name}</div></td>
                   <td>{c.phone || '-'}</td>
                   <td>{c.email || '-'}</td>
-                  <td>{c.city || '-'}</td>
-                  <td><span className={`badge ${c.type === 'government' ? 'badge-blue' : 'badge-purple'}`}>{c.type || '-'}</span></td>
+                  <td>{c.billing_address || '-'}</td>
+                  <td><span className={`badge ${c.customer_type === 'government' ? 'badge-blue' : 'badge-purple'}`}>{c.customer_type || '-'}</span></td>
                   <td style={{ color: 'var(--color-text-muted)' }}>{formatDate(c.created_at)}</td>
                   <td><button className="btn btn-outline btn-icon btn-sm" onClick={() => setDetail(c)}><Eye size={13} /></button></td>
                 </tr>
@@ -97,7 +97,6 @@ export default function CustomersPage() {
               </div>
               <div><label className="input-label">Alamat</label><textarea className="input resize-none" rows={2} value={form.address} onChange={(e) => setForm(f=>({...f,address:e.target.value}))} /></div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="input-label">Kota</label><input className="input" value={form.city} onChange={(e) => setForm(f=>({...f,city:e.target.value}))} /></div>
                 <div>
                   <label className="input-label">Tipe</label>
                   <select className="input" value={form.type} onChange={(e) => setForm(f=>({...f,type:e.target.value}))}>
@@ -125,16 +124,16 @@ export default function CustomersPage() {
               <div className="font-bold text-[15px]">Detail Customer</div>
               <button className="btn btn-outline btn-icon btn-sm" onClick={() => setDetail(null)}><X size={14} /></button>
             </div>
-            {[['Kode',detail.customer_code],['Nama',detail.name],['Telepon',detail.phone||'-'],['Email',detail.email||'-'],['Kota',detail.city||'-'],['Tipe',detail.type||'-'],['NPWP',detail.tax_id||'-'],['Dibuat',formatDate(detail.created_at)]].map(([k,v])=>(
+            {[['Kode',detail.customer_code],['Nama',detail.customer_name],['Telepon',detail.phone||'-'],['Email',detail.email||'-'],['Alamat',detail.billing_address||'-'],['Tipe',detail.customer_type||'-'],['NPWP',detail.tax_id||'-'],['Dibuat',formatDate(detail.created_at)]].map(([k,v])=>(
               <div key={k} className="flex gap-3 mb-3">
                 <div className="text-[12px] w-24 flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{k}</div>
                 <div className="text-[12.5px] font-medium" style={{ color: 'var(--color-text)' }}>{v}</div>
               </div>
             ))}
-            {detail.address && (
+            {detail.billing_address && (
               <div className="mb-3">
                 <div className="text-[12px] mb-1" style={{ color: 'var(--color-text-muted)' }}>Alamat</div>
-                <div className="p-3 rounded-lg text-[12.5px]" style={{ background: 'var(--color-bg)' }}>{detail.address}</div>
+                <div className="p-3 rounded-lg text-[12.5px]" style={{ background: 'var(--color-bg)' }}>{detail.billing_address}</div>
               </div>
             )}
           </div>

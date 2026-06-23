@@ -18,9 +18,9 @@ async function createCADisbursementJournal(caCode: string, amount: number, userN
   const jnlCode   = `JNL-${ym}-${String(nextNum).padStart(4, '0')}`;
 
   await query(
-    `INSERT INTO journal_entries (journal_code, transaction_date, description, reference_type, reference_code, status, created_by)
-     VALUES (?, NOW(), ?, 'cash_advance', ?, 'posted', ?)`,
-    [jnlCode, `CA Disbursement — ${caCode}`, caCode, userName]
+    `INSERT INTO journal_entries (journal_code, transaction_date, description, reference_type, reference_code, total_debit, total_credit, status, created_by)
+     VALUES (?, NOW(), ?, 'cash_advance', ?, ?, ?, 'posted', ?)`,
+    [jnlCode, `CA Disbursement — ${caCode}`, caCode, amount, amount, userName]
   );
 
   const ts = Date.now();
@@ -73,8 +73,8 @@ export const POST = withAuth(async (req: NextRequest, user) => {
 
     if (action === 'approve') {
       await query(
-        `UPDATE cash_advances SET status='approved', approved_by=?, approved_by_code=?, approved_date=NOW(), updated_at=NOW() WHERE ca_code=? AND is_deleted=0`,
-        [user.name, user.user_code, ca_code]
+        `UPDATE cash_advances SET status='approved', approved_by=?, approved_date=NOW(), updated_at=NOW() WHERE ca_code=? AND is_deleted=0`,
+        [user.name, ca_code]
       );
       return ok({ ca_code, new_status: 'approved' });
     }
