@@ -23,6 +23,14 @@ config/*.json
 # Uploads (user files — store in cloud storage in production)
 public/uploads/
 
+# Build artifacts
+tsconfig.tsbuildinfo
+
+# Data / Excel files — jangan commit ke repo
+*.xlsx
+*.xls
+*.csv
+
 # Misc
 .DS_Store
 *.log
