@@ -31,6 +31,11 @@ tsconfig.tsbuildinfo
 *.xls
 *.csv
 
+# SQL backup & dump files di root — pakai database/schema.sql
+backup-*.sql
+*_master_only.sql
+*_backup*.sql
+
 # Misc
 .DS_Store
 *.log
