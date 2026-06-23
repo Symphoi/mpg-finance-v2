@@ -26,9 +26,7 @@ public/uploads/
 # Build artifacts
 tsconfig.tsbuildinfo
 
-# Data / Excel files — jangan commit ke repo
-*.xlsx
-*.xls
+# Data files
 *.csv
 
 # SQL backup & dump files di root — pakai database/schema.sql
